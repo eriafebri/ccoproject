@@ -1546,6 +1546,21 @@
 
       try {
         let userFound = null;
+
+        // Daftar pengguna harus diambil dari Supabase SAAT LOGIN. Sebelumnya
+        // koneksi Supabase baru dibuat setelah login, sehingga di perangkat/browser
+        // baru hanya akun bawaan yang dikenali dan pengguna baru ditolak.
+        try {
+          if (window.BIMA_SB && window.BIMA_SB.isConfigured() && typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const cloudUsers = await bimaSbFetchAllRows('USERS');
+            if (cloudUsers && cloudUsers.length > 0) {
+              systemDb.USERS_RAW = cloudUsers;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("Gagal mengambil daftar pengguna dari Supabase, memakai data lokal:", fetchErr);
+        }
+
         const usersList = systemDb.USERS_RAW || DEFAULT_SAMPLE_DATA.USERS;
         userFound = usersList.find(usr => String(usr.username).toLowerCase().trim() === u.toLowerCase() && String(usr.password) === p);
 
