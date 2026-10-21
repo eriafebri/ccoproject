@@ -213,6 +213,21 @@
           return { success: false, error: e.message };
         }
       },
+      updateRecord: async (tableName, docId, dataObj) => {
+        if (!supabaseClient) return { success: false, error: "Database Supabase belum terhubung." };
+        try {
+          let query = supabaseClient.from(tableName).update(dataObj);
+          query = (tableName === 'USERS') ? query.eq('username', String(docId)) : query.eq('id', docId);
+          const { data, error } = await query.select();
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            throw new Error("Tidak ada baris yang diperbarui. Pastikan RLS policy UPDATE untuk tabel " + tableName + " sudah diaktifkan di Supabase.");
+          }
+          return { success: true };
+        } catch (e) {
+          return { success: false, error: e.message };
+        }
+      },
       clearCollection: async (tableName) => {
         if (!supabaseClient) return { success: false, error: "Database Supabase belum terhubung." };
         try {
@@ -412,6 +427,22 @@
       }
     }
 
+    /* Jurnal Finance & Operasional: scroll horizontal + vertikal, header & kolom aksi menempel */
+    .journal-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+    .journal-table th, .journal-table td { white-space: nowrap; }
+    .journal-table thead th {
+      position: sticky; top: 0; z-index: 2;
+      background-color: var(--table-th-bg) !important;
+      color: var(--table-th-text) !important;
+      border-bottom: 2px solid var(--table-border);
+    }
+    .journal-table thead th.sticky-col { left: 0; z-index: 4; }
+    .journal-table td.sticky-col {
+      position: sticky; left: 0; z-index: 1;
+      background-color: var(--app-card);
+      border-right: 1px solid var(--table-border);
+    }
+
     @media (max-width: 380px) {
       /* Sembunyikan label teks status sinkron di layar sangat sempit,
          titik indikator warna tetap terlihat */
@@ -504,6 +535,7 @@
           <button onclick="switchTab('operasional')" id="btn-tab-operasional" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-amber-500 transition-all flex-menu role-hide-viewer">Operasional</button>
           <button onclick="switchTab('uplinker')" id="btn-tab-uplinker" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-amber-500 transition-all flex-menu role-hide-viewer">Upload CSV</button>
           <button onclick="switchTab('usermgr')" id="btn-tab-usermgr" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-amber-500 transition-all flex-menu role-hide-viewer role-hide-operator">Kelola Pengguna</button>
+          <button onclick="switchTab('jobsite')" id="btn-tab-jobsite" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-400 hover:text-amber-500 transition-all flex-menu role-hide-viewer role-hide-operator">Kelola Jobsite</button>
         </nav>
 
         <!-- Kanan Atas: Badge Pengguna, Sinkronisasi, Tema & Logout -->
@@ -804,6 +836,12 @@
             </div>
 
             <div class="premium-card rounded-2xl p-4 shadow-sm">
+              <p class="text-[9px] font-bold uppercase mb-1" style="color: var(--app-text-muted);">Revenue Rental</p>
+              <h3 id="kpi-rev-rental" class="text-xs md:text-sm font-black truncate">0</h3>
+              <p class="text-[8px] mt-1 truncate" style="color: var(--app-text-faint);">Tar: <span id="kpi-rev-rental-target" class="font-bold">0</span></p>
+            </div>
+
+            <div class="premium-card rounded-2xl p-4 shadow-sm">
               <p class="text-[9px] font-bold uppercase mb-1" style="color: var(--app-text-muted);">R&amp;M Cost</p>
               <h3 id="kpi-rm-cost" class="text-xs md:text-sm font-black truncate">0</h3>
               <p id="kpi-rm-pct" class="text-[8px] text-rose-400 font-extrabold mt-1">0% dari Net Rev</p>
@@ -851,9 +889,9 @@
         <!-- Section Fuel Radar Monitoring -->
         <div class="premium-card p-4 rounded-2xl shadow-sm space-y-3">
           <h4 class="text-xs font-black flex items-center gap-2" style="color: var(--app-text-main);">
-            <span class="w-2 h-4 bg-blue-500 rounded-full"></span> LIVE JOBSITE FUEL EFFICIENCY MONITOR (L/Hour vs Targets)
+            <span class="w-2 h-4 bg-blue-500 rounded-full"></span> LIVE JOBSITE FUEL EFFICIENCY MONITOR (Fuel Ratio vs Target) <span id="fuel-panel-scope" class="text-[10px] font-bold text-amber-500"></span>
           </h4>
-          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3" id="jobsite-fuel-panel"></div>
+          <div id="jobsite-fuel-panel" class="overflow-x-auto custom-scrollbar border rounded-xl" style="border-color: var(--table-border);"></div>
         </div>
 
         <!-- Section Charts & Graphics -->
@@ -912,6 +950,8 @@
           <button onclick="switchPnlFormat('consolidated')" id="btn-pnl-consolidated" class="px-4 py-2 text-xs font-bold border-b-2 border-amber-500 text-amber-500 whitespace-nowrap">Budget vs Actual (Konsolidasi)</button>
           <button onclick="switchPnlFormat('wg_coal')" id="btn-pnl-wg-coal" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Budget vs Actual: Coal</button>
           <button onclick="switchPnlFormat('wg_ob')" id="btn-pnl-wg-ob" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Budget vs Actual: OB</button>
+          <button onclick="switchPnlFormat('wg_mud')" id="btn-pnl-wg-mud" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Budget vs Actual: Mud</button>
+          <button onclick="switchPnlFormat('wg_ts')" id="btn-pnl-wg-ts" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Budget vs Actual: Topsoil</button>
           <button onclick="switchPnlFormat('annual_budget')" id="btn-pnl-annual-budget" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Annual Budget (Jan - Des)</button>
           <button onclick="switchPnlFormat('annual_actual')" id="btn-pnl-annual-actual" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-amber-500 transition-colors whitespace-nowrap">Annual Actual (Jan - Des)</button>
         </div>
@@ -938,6 +978,7 @@
             </table>
           </div>
         </div>
+        <div id="pnl-sector-breakdown"></div>
       </section>
 
       <section id="tab-report" class="hidden space-y-6">
@@ -976,180 +1017,61 @@
         </div>
       </section>
 
-      <section id="tab-finance" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div id="finance-form-sidebar" class="premium-card rounded-2xl p-5 shadow-sm space-y-6">
-          <div>
-            <h4 class="text-xs font-bold uppercase text-amber-500 mb-1">Pencatatan Finance / Costing</h4>
-            <p class="text-[10px]" style="color: var(--app-text-muted);">Simpan Rencana Anggaran (Budget) &amp; Realisasi Riil (Actual)</p>
-          </div>
-
-          <div class="flex border-b" style="border-color: var(--table-border);">
-            <button onclick="switchFormFinance('cost_budget')" id="btn-form-cost-budget" class="flex-1 pb-2 text-xs font-bold text-amber-500 border-b-2 border-amber-500">Costing (Budget)</button>
-            <button onclick="switchFormFinance('cost_actual')" id="btn-form-cost-actual" class="flex-1 pb-2 text-xs font-bold text-slate-400">Costing (Actual)</button>
-          </div>
-
-          <form id="form-fin-cost" onsubmit="handleFinanceFormSubmit(event)" class="space-y-4">
-            <input type="hidden" id="form-fin-type" value="COSTING_BUDGET">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Tanggal</label>
-                <input type="date" name="Date" required class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Jobsite</label>
-                <select name="Site" id="form-fin-site" required class="w-full border rounded-xl p-2.5 text-xs"></select>
-              </div>
+      <section id="tab-finance" class="hidden space-y-6">
+        <div class="premium-card rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-wrap gap-3 justify-between items-center">
+            <div>
+              <h4 class="text-xs font-bold uppercase text-amber-500">Jurnal Histori Finance</h4>
+              <p class="text-[10px]" style="color: var(--app-text-muted);">Input data melalui menu Upload CSV. Geser tabel ke samping, atas &amp; bawah untuk melihat seluruh kolom. Klik <b>Edit</b> untuk mengubah satu baris.</p>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Workgroup</label>
-                <input type="text" name="Workgroup" required placeholder="Contoh: WG1" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Kurs Rp/USD</label>
-                <input type="number" name="Kurs Rp per USD" value="16000" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-            </div>
-            
-            <div class="border-t pt-3" style="border-color: var(--table-border);">
-              <p class="text-[9px] font-bold text-amber-500 uppercase mb-2">Harga Material ($)</p>
-              <div class="grid grid-cols-2 gap-2">
-                <input type="number" step="any" name="Price Coal ($/Ton)" placeholder="Price Coal" class="p-2.5 border rounded-xl text-xs">
-                <input type="number" step="any" name="Price Overburden ($/BCM)" placeholder="Price OB" class="p-2.5 border rounded-xl text-xs">
-              </div>
-            </div>
-
-            <div class="border-t pt-3" style="border-color: var(--table-border);">
-              <p class="text-[9px] font-bold text-amber-500 uppercase mb-2">Volume Produksi</p>
-              <div class="grid grid-cols-2 gap-2">
-                <input type="number" step="any" name="Coal" placeholder="Coal (Ton)" class="p-2.5 border rounded-xl text-xs">
-                <input type="number" step="any" name="Overburden" placeholder="OB (BCM)" class="p-2.5 border rounded-xl text-xs">
-              </div>
-            </div>
-
-            <div class="border-t pt-3" style="border-color: var(--table-border);">
-              <p class="text-[9px] font-bold text-amber-500 uppercase mb-2">Pendapatan (IDR)</p>
-              <div class="grid grid-cols-2 gap-2">
-                <input type="number" step="any" name="Revenue OB" placeholder="Revenue OB" class="p-2.5 border rounded-xl text-xs">
-                <input type="number" step="any" name="Revenue Coal" placeholder="Revenue Coal" class="p-2.5 border rounded-xl text-xs">
-              </div>
-            </div>
-
-            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs btn-op-allowed transition-all shadow-sm">Simpan Data Finance</button>
-          </form>
-        </div>
-
-        <div class="premium-card rounded-2xl p-5 shadow-sm lg:col-span-2 space-y-6">
-          <div class="flex justify-between items-center">
-            <h4 class="text-xs font-bold uppercase text-amber-500">Jurnal Histori Finance</h4>
-            <div class="flex space-x-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button onclick="toggleFinanceTable('COSTING_BUDGET')" id="btn-tbl-fin-budget" class="text-[10px] px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg transition-all">COSTING BUDGET</button>
               <button onclick="toggleFinanceTable('COSTING_ACTUAL')" id="btn-tbl-fin-actual" class="text-[10px] px-3 py-1.5 border font-bold text-slate-400 rounded-lg transition-all" style="background-color: var(--input-bg); border-color: var(--app-card-border);">COSTING ACTUAL</button>
+              <select onchange="changeJournalLimit(this.value)" class="journal-limit text-[10px] border rounded-lg px-2 py-1.5 font-bold" title="Jumlah baris ditampilkan">
+                <option value="100">100 baris</option>
+                <option value="500" selected>500 baris</option>
+                <option value="1000">1000 baris</option>
+                <option value="0">Semua baris</option>
+              </select>
               <button onclick="handleDeleteFinanceSelected()" id="btn-fin-delete-selected" class="btn-op-allowed text-[10px] px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-lg transition-all shadow-sm">Hapus Terpilih</button>
             </div>
           </div>
-          <div class="overflow-auto custom-scrollbar border rounded-xl" style="border-color: var(--table-border); max-height: 480px;">
-            <table class="w-full text-left border-collapse text-xs min-w-[600px]">
-              <thead id="fin-table-head" class="pnl-th-header font-bold sticky top-0 z-10"></thead>
+          <div class="journal-scroll overflow-auto custom-scrollbar border rounded-xl" style="border-color: var(--table-border); max-height: 70vh;">
+            <table class="journal-table w-full text-left border-collapse text-xs">
+              <thead id="fin-table-head" class="font-bold"></thead>
               <tbody id="fin-table-body" class="divide-y" style="border-color: var(--table-border);"></tbody>
             </table>
           </div>
+          <p id="fin-table-info" class="text-[10px] font-semibold" style="color: var(--app-text-faint);"></p>
         </div>
       </section>
 
-      <section id="tab-operasional" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div id="ops-form-sidebar" class="premium-card rounded-2xl p-5 shadow-sm space-y-6">
-          <div>
-            <h4 class="text-xs font-bold uppercase text-amber-500 mb-1">Pencatatan Operasional Lapangan</h4>
-            <p class="text-[10px]" style="color: var(--app-text-muted);">Pencatatan produksi harian &amp; jam tunda alat berat</p>
-          </div>
-
-          <div class="flex border-b" style="border-color: var(--table-border);">
-            <button onclick="switchFormOps('log_produksi')" id="btn-form-log-produksi" class="flex-1 pb-2 text-xs font-bold text-amber-500 border-b-2 border-amber-500">Log Produksi</button>
-            <button onclick="switchFormOps('equip_perf')" id="btn-form-equip-perf" class="flex-1 pb-2 text-xs font-bold text-slate-400">Equipment Performance</button>
-          </div>
-
-          <form id="form-ops-log" onsubmit="handleOpsFormSubmit(event, 'LOG_PRODUKSI')" class="space-y-4">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Tanggal</label>
-                <input type="date" name="Date" required class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Jobsite</label>
-                <select name="Site" id="form-ops-log-site" required class="w-full border rounded-xl p-2.5 text-xs"></select>
-              </div>
+      <section id="tab-operasional" class="hidden space-y-6">
+        <div class="premium-card rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-wrap gap-3 justify-between items-center">
+            <div>
+              <h4 class="text-xs font-bold uppercase text-amber-500">Jurnal Operasional Lapangan</h4>
+              <p class="text-[10px]" style="color: var(--app-text-muted);">Input data melalui menu Upload CSV. Geser tabel ke samping, atas &amp; bawah untuk melihat seluruh kolom. Klik <b>Edit</b> untuk mengubah satu baris.</p>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Workgroup</label>
-                <select name="Workgroup" required class="w-full border rounded-xl p-2.5 text-xs">
-                  <option value="OB">OB (Overburden)</option>
-                  <option value="TS">TS (Topsoil)</option>
-                  <option value="MUD">MUD (Lumpur)</option>
-                  <option value="COAL">COAL</option>
-                  <option value="KDC-COAL-SMD">KDC-COAL-SMD</option>
-                  <option value="KDC-COAL-SM-A">KDC-COAL-SM-A</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Plan Prod</label>
-                <input type="number" step="any" name="Plan Production" placeholder="0" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Actual Prod</label>
-                <input type="number" step="any" name="Actual Production" required class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Actual Fuel Usage (L)</label>
-                <input type="number" step="any" name="Actual Fuel Usage" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-            </div>
-            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs btn-op-allowed transition-all shadow-sm">Simpan Log Produksi</button>
-          </form>
-
-          <form id="form-ops-equip" onsubmit="handleOpsFormSubmit(event, 'EQUIPMENT_PERFORMANCE')" class="space-y-4 hidden">
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Tanggal</label>
-                <input type="date" name="Date" required class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Jobsite</label>
-                <select name="Site" id="form-ops-equip-site" required class="w-full border rounded-xl p-2.5 text-xs"></select>
-              </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">No Unit</label>
-                <input type="text" name="Unit_No" required placeholder="EX-2001" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-              <div>
-                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Model Alat</label>
-                <input type="text" name="Model" placeholder="PC200" class="w-full border rounded-xl p-2.5 text-xs">
-              </div>
-            </div>
-            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs btn-op-allowed transition-all shadow-sm">Simpan Equipment Perf</button>
-          </form>
-        </div>
-
-        <div class="premium-card rounded-2xl p-5 shadow-sm lg:col-span-2 space-y-6">
-          <div class="flex justify-between items-center">
-            <h4 class="text-xs font-bold uppercase text-amber-500">Jurnal Operasional Lapangan</h4>
-            <div class="flex space-x-2">
+            <div class="flex flex-wrap items-center gap-2">
               <button onclick="toggleOpsTable('LOG_PRODUKSI')" id="btn-tbl-ops-log" class="text-[10px] px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg transition-all">LOG PRODUKSI</button>
               <button onclick="toggleOpsTable('EQUIPMENT_PERFORMANCE')" id="btn-tbl-ops-equip" class="text-[10px] px-3 py-1.5 border font-bold text-slate-400 rounded-lg transition-all" style="background-color: var(--input-bg); border-color: var(--app-card-border);">EQUIPMENT PERFORMANCE</button>
+              <select onchange="changeJournalLimit(this.value)" class="journal-limit text-[10px] border rounded-lg px-2 py-1.5 font-bold" title="Jumlah baris ditampilkan">
+                <option value="100">100 baris</option>
+                <option value="500" selected>500 baris</option>
+                <option value="1000">1000 baris</option>
+                <option value="0">Semua baris</option>
+              </select>
               <button onclick="handleDeleteOpsSelected()" id="btn-ops-delete-selected" class="btn-op-allowed text-[10px] px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold rounded-lg transition-all shadow-sm">Hapus Terpilih</button>
             </div>
           </div>
-          <div class="overflow-auto custom-scrollbar border rounded-xl" style="border-color: var(--table-border); max-height: 480px;">
-            <table class="w-full text-left border-collapse text-xs min-w-[600px]">
-              <thead id="ops-table-head" class="pnl-th-header font-bold sticky top-0 z-10"></thead>
+          <div class="journal-scroll overflow-auto custom-scrollbar border rounded-xl" style="border-color: var(--table-border); max-height: 70vh;">
+            <table class="journal-table w-full text-left border-collapse text-xs">
+              <thead id="ops-table-head" class="font-bold"></thead>
               <tbody id="ops-table-body" class="divide-y" style="border-color: var(--table-border);"></tbody>
             </table>
           </div>
+          <p id="ops-table-info" class="text-[10px] font-semibold" style="color: var(--app-text-faint);"></p>
         </div>
       </section>
 
@@ -1238,6 +1160,50 @@
         </div>
       </section>
 
+      <section id="tab-jobsite" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="premium-card rounded-2xl p-5 shadow-sm space-y-4">
+          <h4 class="text-xs font-bold uppercase text-amber-500">TAMBAH JOBSITE BARU</h4>
+          <form onsubmit="handleJobsiteCreate(event)" class="space-y-3">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase">Nama Jobsite</label>
+              <input type="text" id="add-jobsite-name" required placeholder="Contoh: BIMA - Lokasi Baru" class="w-full border rounded-xl p-2.5 text-xs">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase">Target Fuel OB (L/BCM)</label>
+                <input type="number" step="any" min="0" id="add-jobsite-fuel-ob" value="0" class="w-full border rounded-xl p-2.5 text-xs">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase">Target Fuel Coal (L/TON)</label>
+                <input type="number" step="any" min="0" id="add-jobsite-fuel-coal" value="0" class="w-full border rounded-xl p-2.5 text-xs">
+              </div>
+            </div>
+            <button type="submit" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-sm">Simpan Jobsite</button>
+          </form>
+          <p id="jobsite-source-info" class="text-[10px] font-semibold" style="color: var(--app-text-faint);"></p>
+        </div>
+
+        <div class="premium-card rounded-2xl p-5 shadow-sm lg:col-span-2 space-y-4">
+          <h4 class="text-xs font-bold uppercase text-amber-500">DAFTAR JOBSITE</h4>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="pnl-th-header font-bold">
+                  <th class="p-3">NO</th>
+                  <th class="p-3">NAMA JOBSITE</th>
+                  <th class="p-3 text-right">TARGET FUEL OB</th>
+                  <th class="p-3 text-right">TARGET FUEL COAL</th>
+                  <th class="p-3 text-right">JUMLAH DATA</th>
+                  <th class="p-3 text-right">AKSI</th>
+                </tr>
+              </thead>
+              <tbody id="jobsite-table-rows" class="divide-y" style="border-color: var(--table-border);"></tbody>
+            </table>
+          </div>
+          <p class="text-[10px]" style="color: var(--app-text-faint);">Menghapus jobsite hanya menghapusnya dari daftar pilihan. Data transaksi lama milik jobsite tersebut tetap tersimpan.</p>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -1259,6 +1225,58 @@
         </button>
         <button onclick="closeNotepadModal()" class="px-4 py-2 text-xs font-bold rounded-xl border" style="background-color: var(--input-bg); border-color: var(--app-card-border); color: var(--app-text-main);">Tutup</button>
       </div>
+    </div>
+  </div>
+
+  <div id="record-edit-modal" class="hidden fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="premium-card rounded-3xl max-w-4xl w-full p-6 shadow-2xl relative flex flex-col" style="max-height: 90vh;">
+      <button type="button" onclick="closeRecordEditModal()" class="absolute top-4 right-4 text-slate-400 hover:text-amber-500 font-extrabold text-xl">&times;</button>
+      <h3 class="text-sm font-extrabold mb-1" style="color: var(--app-text-main);">EDIT DATA JURNAL</h3>
+      <p id="record-edit-subtitle" class="text-[10px] mb-4" style="color: var(--app-text-muted);"></p>
+      <form id="record-edit-form" onsubmit="handleRecordEditSubmit(event)" class="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        <div id="record-edit-fields" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3"></div>
+        <datalist id="wg-options">
+          <option value="OB"></option><option value="TS"></option><option value="MUD"></option><option value="COAL"></option>
+          <option value="KDC-COAL-SMD"></option><option value="KDC-COAL-SM-A"></option>
+        </datalist>
+      </form>
+      <div class="flex justify-end gap-2 pt-4 mt-4 border-t" style="border-color: var(--table-border);">
+        <button type="submit" form="record-edit-form" id="record-edit-save" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl transition-all shadow-sm">Simpan Perubahan</button>
+        <button type="button" onclick="closeRecordEditModal()" class="px-4 py-2 text-xs font-bold rounded-xl border" style="background-color: var(--input-bg); border-color: var(--app-card-border); color: var(--app-text-main);">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="user-edit-modal" class="hidden fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="premium-card rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+      <button type="button" onclick="closeUserEditModal()" class="absolute top-4 right-4 text-slate-400 hover:text-amber-500 font-extrabold text-xl">&times;</button>
+      <h3 class="text-sm font-extrabold mb-4" style="color: var(--app-text-main);">EDIT PENGGUNA</h3>
+      <form onsubmit="handleUserEditSubmit(event)" class="space-y-3">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase">Username</label>
+          <input type="text" id="edit-username" readonly class="w-full border rounded-xl p-2.5 text-xs opacity-70 cursor-not-allowed">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase">Nama Lengkap</label>
+          <input type="text" id="edit-fullname" required class="w-full border rounded-xl p-2.5 text-xs">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase">Peran (Role)</label>
+          <select id="edit-role" class="w-full border rounded-xl p-2.5 text-xs">
+            <option value="administrator">Administrator</option>
+            <option value="operator">Operator</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase">Password Baru</label>
+          <input type="password" id="edit-password" placeholder="Kosongkan jika tidak diubah" class="w-full border rounded-xl p-2.5 text-xs">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" id="user-edit-save" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-sm">Simpan Perubahan</button>
+          <button type="button" onclick="closeUserEditModal()" class="flex-1 py-2.5 text-xs font-bold rounded-xl border" style="background-color: var(--input-bg); border-color: var(--app-card-border); color: var(--app-text-main);">Batal</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -1597,9 +1615,11 @@
       
       enforceRoleAccess();
 
+      // Muat daftar jobsite (lokal dulu, lalu disinkronkan dari Supabase bila tersedia)
+      applyJobsiteRecords(loadLocalJobsites());
+
       // Siapkan memori data awal bersih
-      if (!systemDb.JOBSITES) {
-        systemDb.JOBSITES = DEFAULT_SAMPLE_DATA.JOBSITES;
+      if (!systemDb.LOG_PRODUKSI) {
         Object.keys(SCHEMA_HEADERS).forEach(coll => {
           if (coll === 'USERS') {
             systemDb.USERS_RAW = DEFAULT_SAMPLE_DATA.USERS;
@@ -1640,6 +1660,7 @@
         populateSelects();
         populateDateCheckboxes();
         applyFilters();
+        if (currentTab === 'jobsite') renderJobsiteList();
       }, delay);
     }
 
@@ -1661,6 +1682,31 @@
       // Bersihkan listener lama
       supabaseUnsubscribes.forEach(unsub => unsub());
       supabaseUnsubscribes = [];
+
+      // Sinkronisasi daftar Jobsite (tabel JOBSITES). Jika tabel belum dibuat di
+      // Supabase, aplikasi otomatis memakai penyimpanan lokal browser.
+      const unsubJobsite = window.BIMA_SB.listenCollection('JOBSITES', async (docs) => {
+        jobsiteSource = 'supabase';
+        if (!docs || docs.length === 0) {
+          // Tabel ada tetapi kosong: isi sekali dengan daftar jobsite yang sudah ada
+          if (!jobsiteSeedDone && currentUser && currentUser.role === 'administrator') {
+            jobsiteSeedDone = true;
+            await window.BIMA_SB.saveBatch('JOBSITES', jobsiteRecords.map(r => ({
+              name: r.name, fuel_ob: parseFloat(r.fuel_ob) || 0, fuel_coal: parseFloat(r.fuel_coal) || 0
+            })));
+          }
+          renderJobsiteList();
+          return;
+        }
+        applyJobsiteRecords(docs.map(d => ({ id: d.id, name: String(d.name || '').trim(), fuel_ob: d.fuel_ob, fuel_coal: d.fuel_coal })).filter(r => r.name));
+        saveLocalJobsites();
+        scheduleFullRefresh();
+      }, (err) => {
+        jobsiteSource = 'local';
+        console.warn('Tabel JOBSITES belum tersedia di Supabase, memakai penyimpanan lokal:', err);
+        renderJobsiteList();
+      });
+      supabaseUnsubscribes.push(unsubJobsite);
 
       const collections = ["LOG_PRODUKSI", "COSTING_BUDGET", "COSTING_ACTUAL", "EQUIPMENT_PERFORMANCE", "USERS"];
 
@@ -1693,7 +1739,7 @@
       showConfirmModal("Apakah Anda yakin ingin mengosongkan seluruh data transaksi dan menginisialisasi database bersih?", async () => {
         if (!window.BIMA_SB || !isSupabaseConnected) {
           systemDb = {
-            JOBSITES: DEFAULT_SAMPLE_DATA.JOBSITES,
+            JOBSITES: systemDb.JOBSITES || DEFAULT_SAMPLE_DATA.JOBSITES,
             USERS_RAW: DEFAULT_SAMPLE_DATA.USERS,
             LOG_PRODUKSI: formatDocsTo2DArray('LOG_PRODUKSI', []),
             COSTING_BUDGET: formatDocsTo2DArray('COSTING_BUDGET', []),
@@ -1825,9 +1871,196 @@
             <td class="p-3 font-extrabold">${usr.fullName}</td>
             <td class="p-3"><span class="px-2.5 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/30">${usr.role.toUpperCase()}</span></td>
             <td class="p-3 font-mono opacity-60">${usr.password}</td>
-            <td class="p-3 text-right">${btnDelete}</td>
+            <td class="p-3 text-right whitespace-nowrap"><button onclick="openUserEditModal('${usr.username}')" class="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded-lg transition-all shadow-sm mr-1">Edit</button>${btnDelete}</td>
           </tr>
         `;
+      });
+    }
+
+    function openUserEditModal(username) {
+      const usr = (systemDb.USERS_RAW || []).find(u => String(u.username) === String(username));
+      if (!usr) return;
+      document.getElementById('edit-username').value = usr.username;
+      document.getElementById('edit-fullname').value = usr.fullName || '';
+      const roleSel = document.getElementById('edit-role');
+      roleSel.value = usr.role || 'viewer';
+      // Akun utama tetap Administrator supaya aplikasi tidak kehilangan admin
+      roleSel.disabled = String(usr.username).toLowerCase() === 'febri';
+      document.getElementById('edit-password').value = '';
+      document.getElementById('user-edit-modal').classList.remove('hidden');
+    }
+
+    function closeUserEditModal() {
+      document.getElementById('user-edit-modal').classList.add('hidden');
+    }
+
+    async function handleUserEditSubmit(e) {
+      e.preventDefault();
+      const username = document.getElementById('edit-username').value;
+      const fullName = document.getElementById('edit-fullname').value.trim();
+      const roleSel = document.getElementById('edit-role');
+      const role = roleSel.disabled ? 'administrator' : roleSel.value;
+      const pw = document.getElementById('edit-password').value;
+
+      if (!fullName) { showCustomAlert("Nama lengkap wajib diisi.", "error"); return; }
+      if (pw && pw.length < 6) { showCustomAlert("Password minimal 6 karakter!", "error"); return; }
+
+      const patch = { fullName: fullName, role: role };
+      if (pw) patch.password = pw;
+
+      const btn = document.getElementById('user-edit-save');
+      btn.disabled = true;
+      try {
+        if (window.BIMA_SB && isSupabaseConnected) {
+          const res = await window.BIMA_SB.updateRecord('USERS', username, patch);
+          if (!res.success) throw new Error(res.error);
+        } else {
+          const usr = (systemDb.USERS_RAW || []).find(u => String(u.username) === String(username));
+          if (usr) Object.assign(usr, patch);
+          renderUsersList();
+        }
+
+        if (currentUser && String(currentUser.username) === String(username)) {
+          currentUser.fullName = fullName;
+          currentUser.role = role;
+          sessionStorage.setItem('BIMA_USER', JSON.stringify(currentUser));
+          document.getElementById('nav-user-badge').innerText = `${currentUser.fullName} (${currentUser.role.toUpperCase()})`;
+          enforceRoleAccess();
+        }
+        closeUserEditModal();
+        showCustomAlert("Data pengguna berhasil diperbarui!");
+      } catch (err) {
+        showCustomAlert("Gagal memperbarui pengguna: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ================= KELOLA JOBSITE =================
+    const JOBSITE_LOCAL_KEY = 'BIMA_JOBSITES';
+    let jobsiteRecords = [];
+    let jobsiteSource = 'local';
+    let jobsiteSeedDone = false;
+
+    function defaultJobsiteRecords() {
+      return DEFAULT_SAMPLE_DATA.JOBSITES.map(n => ({
+        name: n,
+        fuel_ob: (JOBSITE_FUEL_TARGETS[n] || {}).ob || 0,
+        fuel_coal: (JOBSITE_FUEL_TARGETS[n] || {}).coal || 0
+      }));
+    }
+
+    function loadLocalJobsites() {
+      try {
+        const stored = localStorage.getItem(JOBSITE_LOCAL_KEY);
+        if (stored) {
+          const arr = JSON.parse(stored);
+          if (Array.isArray(arr) && arr.length > 0) return arr.filter(r => r && r.name);
+        }
+      } catch (e) {}
+      return defaultJobsiteRecords();
+    }
+
+    function saveLocalJobsites() {
+      try {
+        localStorage.setItem(JOBSITE_LOCAL_KEY, JSON.stringify(jobsiteRecords.map(r => ({ name: r.name, fuel_ob: r.fuel_ob, fuel_coal: r.fuel_coal }))));
+      } catch (e) {}
+    }
+
+    function applyJobsiteRecords(records) {
+      jobsiteRecords = records;
+      systemDb.JOBSITES = records.map(r => String(r.name).trim()).filter(Boolean);
+      renderJobsiteList();
+    }
+
+    function getFuelTarget(site) {
+      const r = jobsiteRecords.find(x => x.name === site);
+      if (r) return { ob: parseFloat(r.fuel_ob) || 0, coal: parseFloat(r.fuel_coal) || 0 };
+      return JOBSITE_FUEL_TARGETS[site] || { ob: 0, coal: 0 };
+    }
+
+    function renderJobsiteList() {
+      const body = document.getElementById('jobsite-table-rows');
+      if (!body) return;
+      const infoEl = document.getElementById('jobsite-source-info');
+      if (infoEl) {
+        infoEl.innerText = jobsiteSource === 'supabase'
+          ? 'Penyimpanan: Supabase (tabel JOBSITES), tersinkron ke semua perangkat.'
+          : 'Penyimpanan: lokal di browser ini (tabel JOBSITES belum tersedia di Supabase).';
+      }
+
+      const counts = {};
+      ["LOG_PRODUKSI", "COSTING_BUDGET", "COSTING_ACTUAL", "EQUIPMENT_PERFORMANCE"].forEach(sheet => {
+        const matrix = systemDb[sheet] || [];
+        if (matrix.length < 2) return;
+        const siteIdx = matrix[0].indexOf("Site");
+        if (siteIdx === -1) return;
+        for (let i = 1; i < matrix.length; i++) {
+          const st = String(matrix[i][siteIdx] || '').trim().toUpperCase();
+          counts[st] = (counts[st] || 0) + 1;
+        }
+      });
+
+      if (jobsiteRecords.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400 font-bold">Belum ada jobsite.</td></tr>';
+        return;
+      }
+      body.innerHTML = jobsiteRecords.map((r, i) => `
+        <tr class="pnl-row-regular text-xs">
+          <td class="p-3 font-semibold opacity-70">${i + 1}</td>
+          <td class="p-3 font-extrabold text-amber-500">${escapeHtml(r.name)}</td>
+          <td class="p-3 text-right">${(parseFloat(r.fuel_ob) || 0).toFixed(2)}</td>
+          <td class="p-3 text-right">${(parseFloat(r.fuel_coal) || 0).toFixed(2)}</td>
+          <td class="p-3 text-right">${formatPlain(counts[String(r.name).trim().toUpperCase()] || 0)}</td>
+          <td class="p-3 text-right"><button onclick="handleJobsiteDelete(${i})" class="px-3 py-1 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-bold rounded-lg transition-all shadow-sm">Hapus</button></td>
+        </tr>`).join('');
+    }
+
+    async function handleJobsiteCreate(e) {
+      e.preventDefault();
+      const name = document.getElementById('add-jobsite-name').value.trim();
+      const fuelOb = parseFloat(document.getElementById('add-jobsite-fuel-ob').value) || 0;
+      const fuelCoal = parseFloat(document.getElementById('add-jobsite-fuel-coal').value) || 0;
+      if (!name) return;
+      if (jobsiteRecords.some(r => String(r.name).trim().toUpperCase() === name.toUpperCase())) {
+        showCustomAlert(`Jobsite "${name}" sudah ada.`, "error");
+        return;
+      }
+      const rec = { name: name, fuel_ob: fuelOb, fuel_coal: fuelCoal };
+
+      if (jobsiteSource === 'supabase' && window.BIMA_SB && isSupabaseConnected) {
+        const res = await window.BIMA_SB.saveRecord('JOBSITES', rec);
+        if (!res.success) {
+          showCustomAlert("Gagal menyimpan jobsite ke Supabase: " + res.error, "error");
+          return;
+        }
+      } else {
+        applyJobsiteRecords([...jobsiteRecords, rec]);
+        saveLocalJobsites();
+        populateSelects();
+        applyFilters();
+      }
+      e.target.reset();
+      showCustomAlert(`Jobsite "${name}" berhasil ditambahkan!`);
+    }
+
+    function handleJobsiteDelete(idx) {
+      const rec = jobsiteRecords[idx];
+      if (!rec) return;
+      showConfirmModal(`Hapus jobsite "${rec.name}" dari daftar? Data transaksi lama tetap tersimpan.`, async () => {
+        if (jobsiteSource === 'supabase' && window.BIMA_SB && isSupabaseConnected && rec.id !== undefined) {
+          const res = await window.BIMA_SB.removeRecord('JOBSITES', rec.id);
+          if (!res.success) {
+            showCustomAlert("Gagal menghapus jobsite: " + res.error, "error");
+            return;
+          }
+        } else {
+          applyJobsiteRecords(jobsiteRecords.filter((_, i) => i !== idx));
+          saveLocalJobsites();
+          populateSelects();
+          applyFilters();
+        }
+        showCustomAlert(`Jobsite "${rec.name}" berhasil dihapus.`);
       });
     }
 
@@ -1939,6 +2172,7 @@
       const btnOperasional = document.getElementById('btn-tab-operasional');
       const btnUplinker = document.getElementById('btn-tab-uplinker');
       const btnUserMgr = document.getElementById('btn-tab-usermgr');
+      const btnJobsite = document.getElementById('btn-tab-jobsite');
       
       const mobBtnDash = document.getElementById('mob-btn-dash');
       const mobBtnPnl = document.getElementById('mob-btn-pnl');
@@ -1955,6 +2189,7 @@
         if (btnOperasional) btnOperasional.style.display = '';
         if (btnUplinker) btnUplinker.style.display = '';
         if (btnUserMgr) btnUserMgr.style.display = 'none';
+        if (btnJobsite) btnJobsite.style.display = 'none';
         
         if (mobBtnDash) mobBtnDash.style.display = '';
         if (mobBtnPnl) mobBtnPnl.style.display = 'none';
@@ -1976,6 +2211,7 @@
         if (btnOperasional) btnOperasional.style.display = 'none';
         if (btnUplinker) btnUplinker.style.display = 'none';
         if (btnUserMgr) btnUserMgr.style.display = 'none';
+        if (btnJobsite) btnJobsite.style.display = 'none';
         
         if (mobBtnDash) mobBtnDash.style.display = '';
         if (mobBtnPnl) mobBtnPnl.style.display = '';
@@ -1997,6 +2233,7 @@
         if (btnOperasional) btnOperasional.style.display = '';
         if (btnUplinker) btnUplinker.style.display = '';
         if (btnUserMgr) btnUserMgr.style.display = '';
+        if (btnJobsite) btnJobsite.style.display = '';
         
         if (mobBtnDash) mobBtnDash.style.display = '';
         if (mobBtnPnl) mobBtnPnl.style.display = '';
@@ -2057,7 +2294,7 @@
         opt.innerText = site;
         filterSite.appendChild(opt);
       });
-      if (oldVal) filterSite.value = oldVal;
+      filterSite.value = (oldVal && sites.includes(oldVal)) ? oldVal : 'ALL';
 
       const forms = ['form-fin-site', 'form-ops-log-site', 'form-ops-equip-site'];
       forms.forEach(fid => {
@@ -2416,12 +2653,58 @@
     // Menentukan apakah satu baris COSTING termasuk sektor "coal" atau "ob"
     // (OB+Topsoil+Mud), memakai aturan nama Workgroup yang sama dengan yang
     // sudah dipakai di seluruh aplikasi (Dashboard & P&L Budget vs Actual).
-    function isRowSector(row, sector) {
+    // Penanda sektor dari nama Workgroup: 'coal', 'ob', 'ts' (Topsoil), 'mud', atau null.
+    function getRowSectorTag(row) {
       const wg = String(row["Workgroup"] || "").trim().toUpperCase();
-      const isCoalWg = (wg === "COAL" || wg.includes("COAL") || wg.includes("KDC"));
-      const isObWg = (wg === "OB" || wg.includes("OVERBURDEN") || wg === "TS" || wg.includes("TOPSOIL") || wg === "MUD");
-      if (sector === 'coal') return isCoalWg;
-      if (sector === 'ob') return isObWg;
+      if (!wg) return null;
+      if (wg === "COAL" || wg.includes("COAL") || wg.includes("KDC")) return 'coal';
+      if (wg === "TS" || wg.includes("TOPSOIL")) return 'ts';
+      if (wg === "MUD" || wg.includes("MUD") || wg.includes("LUMPUR")) return 'mud';
+      if (wg === "OB" || wg.includes("OVERBURDEN")) return 'ob';
+      return null;
+    }
+
+    // Porsi alokasi biaya bersama per sektor. Baris dengan Workgroup jelas = 100% ke
+    // sektornya; baris tanpa penanda dibagi proporsional volume (Coal x1.3 seperti semula).
+    // Jumlah porsi selalu = 1 sehingga OB + Coal + Mud + Topsoil = Konsolidasi.
+    function getSectorRatios(row) {
+      const tag = getRowSectorTag(row);
+      if (tag) return { ob: tag === 'ob' ? 1 : 0, coal: tag === 'coal' ? 1 : 0, mud: tag === 'mud' ? 1 : 0, ts: tag === 'ts' ? 1 : 0 };
+      const w = {
+        coal: getValByNormalizedKey(row, "Coal") * 1.3,
+        ob: getValByNormalizedKey(row, "Overburden"),
+        mud: getValByNormalizedKey(row, "Mud"),
+        ts: getValByNormalizedKey(row, "Topsoil")
+      };
+      const ttl = w.coal + w.ob + w.mud + w.ts;
+      if (ttl > 0) return { ob: w.ob / ttl, coal: w.coal / ttl, mud: w.mud / ttl, ts: w.ts / ttl };
+      return { ob: 0.25, coal: 0.25, mud: 0.25, ts: 0.25 };
+    }
+
+    const PNL_FORMAT_SECTOR = { wg_coal: 'coal', wg_ob: 'ob', wg_mud: 'mud', wg_ts: 'ts' };
+    const VOLUME_KEY_SECTOR = { "Coal": 'coal', "Overburden": 'ob', "Mud": 'mud', "Topsoil": 'ts' };
+    const REVENUE_KEY_SECTOR = {
+      "Revenue Coal": 'coal', "Revenue OB": 'ob', "Revenue Topsoil": 'ts', "Revenue Mud": 'mud',
+      "Revenue Sediment Trap": 'ob', "Deposit 1% (Overburden Revenue)": 'ob'
+    };
+
+    // Faktor pengali satu baris COSTING untuk sektor tertentu (null = konsolidasi, faktor 1).
+    function pnlFactor(row, sector, rowDef) {
+      if (!sector) return 1;
+      const tag = getRowSectorTag(row);
+      const fullIfOwn = (s) => (s === sector) ? ((tag && tag !== sector) ? 0 : 1) : 0;
+      if (rowDef && rowDef.isVol) return fullIfOwn(VOLUME_KEY_SECTOR[rowDef.volKey]);
+      if (rowDef && rowDef.key && REVENUE_KEY_SECTOR[rowDef.key]) return fullIfOwn(REVENUE_KEY_SECTOR[rowDef.key]);
+      return getSectorRatios(row)[sector] || 0;
+    }
+
+    // 'ob' = grup OB+Topsoil+Mud (dipakai KPI Dashboard), 'obonly' = Overburden saja.
+    function isRowSector(row, sector) {
+      const tag = getRowSectorTag(row);
+      if (sector === 'coal') return tag === 'coal';
+      if (sector === 'ob') return tag === 'ob' || tag === 'ts' || tag === 'mud';
+      if (sector === 'obonly') return tag === 'ob';
+      if (sector === 'ts' || sector === 'mud') return tag === sector;
       return true;
     }
 
@@ -2606,33 +2889,85 @@
       document.getElementById('kpi-prod-ob-val').innerText = prodObVal.toFixed(2) + " BCM/H";
       document.getElementById('kpi-prod-co-val').innerText = prodCoalVal.toFixed(2) + " TON/H";
 
-      // Panel Efisiensi Fuel Radar
+      // Panel Efisiensi Fuel: tabel mengikuti jobsite yang dipilih pada filter
       const fuelPanel = document.getElementById('jobsite-fuel-panel');
-      fuelPanel.innerHTML = '';
-      
-      Object.keys(fuelByJobsite).forEach(site => {
-        const data = fuelByJobsite[site];
-        const target = JOBSITE_FUEL_TARGETS[site] || { ob: 0, coal: 0 };
-        
+      const fuelSiteFilter = document.getElementById('filter-site').value;
+      const fuelSites = fuelSiteFilter === 'ALL' ? Object.keys(fuelByJobsite) : [fuelSiteFilter];
+      const fuelScopeEl = document.getElementById('fuel-panel-scope');
+      if (fuelScopeEl) fuelScopeEl.innerText = fuelSiteFilter === 'ALL' ? `• ${fuelSites.length} Jobsite` : `• ${fuelSiteFilter}`;
+
+      const fuelRatioCell = (ratio, target) => {
+        if (ratio <= 0) return `<span style="color: var(--app-text-faint);">-</span>`;
+        const over = target > 0 && ratio > target;
+        return `<span class="${over ? 'text-rose-400' : 'text-emerald-400'} font-extrabold">${ratio.toFixed(2)}</span>`;
+      };
+      const fuelTot = { obFuel: 0, obProd: 0, coalFuel: 0, coalProd: 0 };
+      let fuelRowsHtml = '';
+      fuelSites.forEach(site => {
+        const data = fuelByJobsite[site] || { obFuel: 0, obProd: 0, coalFuel: 0, coalProd: 0 };
+        const target = getFuelTarget(site);
         const obRatio = data.obProd > 0 ? (data.obFuel / data.obProd) : 0;
         const coalRatio = data.coalProd > 0 ? (data.coalFuel / data.coalProd) : 0;
+        fuelTot.obFuel += data.obFuel; fuelTot.obProd += data.obProd;
+        fuelTot.coalFuel += data.coalFuel; fuelTot.coalProd += data.coalProd;
 
-        fuelPanel.innerHTML += `
-          <div class="rounded-xl p-3 text-center space-y-1 border" style="background-color: var(--input-bg); border-color: var(--app-card-border);">
-            <h5 class="text-[10px] font-extrabold truncate" style="color: var(--app-text-main);">${site}</h5>
-            <div class="border-t pt-1 text-[9px] text-left space-y-1" style="border-color: var(--table-border);">
-              <div class="flex justify-between">
-                <span style="color: var(--app-text-faint);">OB:</span>
-                <span class="${obRatio > target.ob && target.ob > 0 ? 'text-rose-400 font-extrabold' : 'text-emerald-400 font-extrabold'}">${obRatio > 0 ? obRatio.toFixed(2) : '0.00'} L/H</span>
-              </div>
-              <div class="flex justify-between">
-                <span style="color: var(--app-text-faint);">CO:</span>
-                <span class="${coalRatio > target.coal && target.coal > 0 ? 'text-rose-400 font-extrabold' : 'text-emerald-400 font-extrabold'}">${coalRatio > 0 ? coalRatio.toFixed(2) : '0.00'} L/H</span>
-              </div>
-            </div>
-          </div>
-        `;
+        let status = `<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold" style="color: var(--app-text-faint); border: 1px solid var(--table-border);">NO DATA</span>`;
+        if (obRatio > 0 || coalRatio > 0) {
+          const over = (target.ob > 0 && obRatio > target.ob) || (target.coal > 0 && coalRatio > target.coal);
+          status = over
+            ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">OVER TARGET</span>`
+            : `<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">ON TARGET</span>`;
+        }
+
+        fuelRowsHtml += `
+          <tr class="pnl-row-regular text-xs">
+            <td class="p-2.5 font-extrabold whitespace-nowrap">${site}</td>
+            <td class="p-2.5 text-right">${formatPlain(data.obFuel)}</td>
+            <td class="p-2.5 text-right">${formatPlain(data.obProd)}</td>
+            <td class="p-2.5 text-right">${fuelRatioCell(obRatio, target.ob)}</td>
+            <td class="p-2.5 text-right opacity-75">${target.ob > 0 ? target.ob.toFixed(2) : '-'}</td>
+            <td class="p-2.5 text-right">${formatPlain(data.coalFuel)}</td>
+            <td class="p-2.5 text-right">${formatPlain(data.coalProd)}</td>
+            <td class="p-2.5 text-right">${fuelRatioCell(coalRatio, target.coal)}</td>
+            <td class="p-2.5 text-right opacity-75">${target.coal > 0 ? target.coal.toFixed(2) : '-'}</td>
+            <td class="p-2.5 text-center">${status}</td>
+          </tr>`;
       });
+      if (fuelSites.length > 1) {
+        const tObR = fuelTot.obProd > 0 ? fuelTot.obFuel / fuelTot.obProd : 0;
+        const tCoR = fuelTot.coalProd > 0 ? fuelTot.coalFuel / fuelTot.coalProd : 0;
+        fuelRowsHtml += `
+          <tr class="pnl-row-highlight text-xs">
+            <td class="p-2.5 pnl-highlight-title">TOTAL</td>
+            <td class="p-2.5 text-right">${formatPlain(fuelTot.obFuel)}</td>
+            <td class="p-2.5 text-right">${formatPlain(fuelTot.obProd)}</td>
+            <td class="p-2.5 text-right">${tObR > 0 ? tObR.toFixed(2) : '-'}</td>
+            <td class="p-2.5"></td>
+            <td class="p-2.5 text-right">${formatPlain(fuelTot.coalFuel)}</td>
+            <td class="p-2.5 text-right">${formatPlain(fuelTot.coalProd)}</td>
+            <td class="p-2.5 text-right">${tCoR > 0 ? tCoR.toFixed(2) : '-'}</td>
+            <td class="p-2.5"></td>
+            <td class="p-2.5"></td>
+          </tr>`;
+      }
+      fuelPanel.innerHTML = `
+        <table class="w-full text-left border-collapse text-xs min-w-[900px]">
+          <thead>
+            <tr class="pnl-th-header text-[10px] uppercase tracking-wider font-extrabold">
+              <th class="p-2.5">Jobsite</th>
+              <th class="p-2.5 text-right">OB Fuel (L)</th>
+              <th class="p-2.5 text-right">OB Prod (BCM)</th>
+              <th class="p-2.5 text-right">Ratio OB (L/BCM)</th>
+              <th class="p-2.5 text-right">Target OB</th>
+              <th class="p-2.5 text-right">Coal Fuel (L)</th>
+              <th class="p-2.5 text-right">Coal Prod (TON)</th>
+              <th class="p-2.5 text-right">Ratio Coal (L/TON)</th>
+              <th class="p-2.5 text-right">Target Coal</th>
+              <th class="p-2.5 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>${fuelRowsHtml || '<tr><td colspan="10" class="p-4 text-center text-slate-400 font-bold">Belum ada jobsite.</td></tr>'}</tbody>
+        </table>`;
 
       document.getElementById('kpi-ob-act').innerText = formatNumeric(actOB, " BCM");
       document.getElementById('kpi-ob-tar').innerText = formatNumeric(tarOB, " BCM");
@@ -2796,6 +3131,8 @@
       document.getElementById('kpi-rev-volume').innerText = formatRupiah(revCoal + revOB + revTS + revMud + revRental);
       document.getElementById('kpi-rev-over-dist').innerText = formatRupiah(revOverDist);
       document.getElementById('kpi-rev-fuel-comp').innerText = formatRupiah(revFuelComp);
+      document.getElementById('kpi-rev-rental').innerText = formatRupiah(revRental);
+      document.getElementById('kpi-rev-rental-target').innerText = formatRupiah(tarRevRental);
 
       document.getElementById('kpi-rm-cost').innerText = formatRupiah(rmCost);
       document.getElementById('kpi-rm-pct').innerText = `${rmPct} dari Net Rev`;
@@ -2826,6 +3163,7 @@
       applyKpiColor('kpi-rev-volume', (revCoal + revOB + revTS + revMud + revRental), targetRevVol, 'FIN_POSITIVE');
       applyKpiColor('kpi-rev-over-dist', revOverDist, targetRevOverDist, 'FIN_POSITIVE');
       applyKpiColor('kpi-rev-fuel-comp', revFuelComp, targetRevFuelComp, 'FIN_POSITIVE');
+      applyKpiColor('kpi-rev-rental', revRental, tarRevRental, 'FIN_POSITIVE');
       applyKpiColor('adv-cost-bcm', costPerBcm, targetCostPerBcm, 'FIN_POSITIVE');
       applyKpiColor('adv-cost-ton', costPerTon, targetCostPerTon, 'FIN_POSITIVE');
 
@@ -3043,7 +3381,7 @@
 
     function switchPnlFormat(format) {
       currentPnlFormat = format;
-      const formats = ['consolidated', 'wg_coal', 'wg_ob', 'annual_budget', 'annual_actual'];
+      const formats = ['consolidated', 'wg_coal', 'wg_ob', 'wg_mud', 'wg_ts', 'annual_budget', 'annual_actual'];
       formats.forEach(f => {
         const btn = document.getElementById(`btn-pnl-${f.replace(/_/g, '-')}`);
         if (btn) {
@@ -3068,13 +3406,19 @@
       if (titleEl && subtitleEl) {
         if (currentPnlFormat === 'consolidated') {
           titleEl.innerText = "PROFIT & LOSS STATEMENT (KONSOLIDASI)";
-          subtitleEl.innerText = "Analisis Laporan Keuangan Konsolidasi Budget vs Actual Seluruh Sektor";
+          subtitleEl.innerText = "Konsolidasi Budget vs Actual = OB + Coal + Mud + Topsoil";
         } else if (currentPnlFormat === 'wg_coal') {
           titleEl.innerText = "PROFIT & LOSS STATEMENT (COAL)";
           subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Batubara (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'wg_ob') {
           titleEl.innerText = "PROFIT & LOSS STATEMENT (OVERBURDEN)";
-          subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor OB, TS & Lumpur (Volume & Seluruh Biaya)";
+          subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Overburden (Volume & Seluruh Biaya)";
+        } else if (currentPnlFormat === 'wg_mud') {
+          titleEl.innerText = "PROFIT & LOSS STATEMENT (MUD / LUMPUR)";
+          subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Mud (Volume & Seluruh Biaya)";
+        } else if (currentPnlFormat === 'wg_ts') {
+          titleEl.innerText = "PROFIT & LOSS STATEMENT (TOPSOIL)";
+          subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Topsoil (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'annual_budget') {
           titleEl.innerText = "PROFIT & LOSS STATEMENT (ANNUAL BUDGET)";
           subtitleEl.innerText = "Distribusi Anggaran Biaya & Pendapatan Bulanan (Januari - Desember)";
@@ -3087,7 +3431,7 @@
       const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
 
-      const isConsolidatedOrWg = (currentPnlFormat === 'consolidated' || currentPnlFormat === 'wg_coal' || currentPnlFormat === 'wg_ob');
+      const isConsolidatedOrWg = (currentPnlFormat === 'consolidated' || !!PNL_FORMAT_SECTOR[currentPnlFormat]);
 
       if (isConsolidatedOrWg) {
         pnlThead.innerHTML = `
@@ -3118,72 +3462,15 @@
       const costingBudget = filteredData.COSTING_BUDGET || [];
       const costingActual = filteredData.COSTING_ACTUAL || [];
 
+      const pnlSector = PNL_FORMAT_SECTOR[currentPnlFormat] || null;
       const getMonthlyArray = (dataset, keyName, rowDef) => {
         const arr = Array(12).fill(0);
         dataset.forEach(row => {
           const stdD = standardizeDate(row["Date"] || "");
           if (!stdD) return;
-          const monthStr = stdD.split('-')[1];
-          const mIdx = months.indexOf(monthStr);
+          const mIdx = months.indexOf(stdD.split('-')[1]);
           if (mIdx === -1) return;
-
-          const wg = String(row["Workgroup"] || "").trim().toUpperCase();
-          const isCoalWg = (wg === "COAL" || wg.includes("COAL") || wg.includes("KDC"));
-          const isObWg = (wg === "OB" || wg.includes("OVERBURDEN") || wg === "TS" || wg.includes("TOPSOIL") || wg === "MUD");
-
-          let coalRatio = 0;
-          let obRatio = 0;
-
-          if (isCoalWg) {
-            coalRatio = 1;
-            obRatio = 0;
-          } else if (isObWg) {
-            coalRatio = 0;
-            obRatio = 1;
-          } else {
-            const rowCoalVol = getValByNormalizedKey(row, "Coal");
-            const rowOBVol = getValByNormalizedKey(row, "Overburden");
-            const rowMudVol = getValByNormalizedKey(row, "Mud");
-            const rowTSVol = getValByNormalizedKey(row, "Topsoil");
-            const volCoalEq = rowCoalVol * 1.3;
-            const volObEq = rowOBVol + rowMudVol + rowTSVol;
-            const ttl = volCoalEq + volObEq;
-            if (ttl > 0) {
-              coalRatio = volCoalEq / ttl;
-              obRatio = volObEq / ttl;
-            } else {
-              coalRatio = 0.5;
-              obRatio = 0.5;
-            }
-          }
-
-          let factor = 1;
-          if (currentPnlFormat === 'wg_coal') {
-            if (rowDef && rowDef.isVol) {
-              factor = (rowDef.volKey === "Coal") ? (isObWg ? 0 : 1) : 0;
-            } else if (rowDef && rowDef.key) {
-              const k = rowDef.key;
-              if (k === "Revenue Coal") factor = (isObWg ? 0 : 1);
-              else if (k === "Revenue OB" || k === "Revenue Topsoil" || k === "Revenue Mud" || k === "Revenue Sediment Trap" || k === "Deposit 1% (Overburden Revenue)") factor = 0;
-              else factor = coalRatio;
-            } else {
-              factor = coalRatio;
-            }
-          } else if (currentPnlFormat === 'wg_ob') {
-            if (rowDef && rowDef.isVol) {
-              factor = (rowDef.volKey === "Coal") ? 0 : (isCoalWg ? 0 : 1);
-            } else if (rowDef && rowDef.key) {
-              const k = rowDef.key;
-              if (k === "Revenue Coal") factor = 0;
-              else if (k === "Revenue OB" || k === "Revenue Topsoil" || k === "Revenue Mud" || k === "Revenue Sediment Trap" || k === "Deposit 1% (Overburden Revenue)") factor = (isCoalWg ? 0 : 1);
-              else factor = obRatio;
-            } else {
-              factor = obRatio;
-            }
-          }
-
-          const rawVal = getValByNormalizedKey(row, keyName);
-          arr[mIdx] += (rawVal * factor);
+          arr[mIdx] += getValByNormalizedKey(row, keyName) * pnlFactor(row, pnlSector, rowDef);
         });
         return arr;
       };
@@ -3196,8 +3483,8 @@
         { label: "Topsoil Volume", unit: "BCM", isVol: true, volKey: "Topsoil" },
         { label: "Coal Volume", unit: "TON", isVol: true, volKey: "Coal" },
         { 
-          label: isWgCoal ? "VOLUME PRODUKSI (TON)" : "VOLUME PRODUKSI (BCM-EQ)", 
-          unit: isWgCoal ? "TON" : "BCM-EQ", 
+          label: isWgCoal ? "VOLUME PRODUKSI (TON)" : (pnlSector ? "VOLUME PRODUKSI (BCM)" : "VOLUME PRODUKSI (BCM-EQ)"), 
+          unit: isWgCoal ? "TON" : (pnlSector ? "BCM" : "BCM-EQ"), 
           isFormula: true, 
           formulaType: "VOL_EQ" 
         },
@@ -3258,8 +3545,8 @@
 
       const pnlConsoActBreak = computeCostBreakdown(costingActual, null);
       const pnlConsoBudBreak = computeCostBreakdown(costingBudget, null);
-      const pnlObActBreak = computeCostBreakdown(costingActual, 'ob');
-      const pnlObBudBreak = computeCostBreakdown(costingBudget, 'ob');
+      const pnlObActBreak = computeCostBreakdown(costingActual, 'obonly');
+      const pnlObBudBreak = computeCostBreakdown(costingBudget, 'obonly');
       const pnlCoalActBreak = computeCostBreakdown(costingActual, 'coal');
       const pnlCoalBudBreak = computeCostBreakdown(costingBudget, 'coal');
 
@@ -3267,11 +3554,11 @@
       // BvA OB = OB+Mud+Topsoil khusus baris sektor OB; BvA Coal = Coal khusus baris sektor Coal.
       const pnlConsoActVol = sumOfNormalized(costingActual, "Overburden") + sumOfNormalized(costingActual, "Mud") + sumOfNormalized(costingActual, "Topsoil") + (sumOfNormalized(costingActual, "Coal") / 1.3);
       const pnlConsoBudVol = sumOfNormalized(costingBudget, "Overburden") + sumOfNormalized(costingBudget, "Mud") + sumOfNormalized(costingBudget, "Topsoil") + (sumOfNormalized(costingBudget, "Coal") / 1.3);
-      const obRows = (dataset) => (dataset || []).filter(r => isRowSector(r, 'ob'));
+      const obRows = (dataset) => (dataset || []).filter(r => isRowSector(r, 'obonly'));
       const coalRows = (dataset) => (dataset || []).filter(r => isRowSector(r, 'coal'));
       const sumField = (rows, key) => rows.reduce((s, r) => s + getValByNormalizedKey(r, key), 0);
-      const pnlObActVol = (rows => sumField(rows, "Overburden") + sumField(rows, "Mud") + sumField(rows, "Topsoil"))(obRows(costingActual));
-      const pnlObBudVol = (rows => sumField(rows, "Overburden") + sumField(rows, "Mud") + sumField(rows, "Topsoil"))(obRows(costingBudget));
+      const pnlObActVol = sumField(obRows(costingActual), "Overburden");
+      const pnlObBudVol = sumField(obRows(costingBudget), "Overburden");
       const pnlCoalActVol = sumField(coalRows(costingActual), "Coal");
       const pnlCoalBudVol = sumField(coalRows(costingBudget), "Coal");
 
@@ -3298,6 +3585,26 @@
       const pnlBepNpvCoalActual = (pnlAvgPriceCoalActual > 0 && pnlAvgKurs > 0) ? (pnlCoalActBreak.allCost / pnlAvgPriceCoalActual / pnlAvgKurs) : 0;
       const pnlCostTonCoalBudget = (pnlCoalBudVol > 0 && pnlAvgKursBudget > 0) ? (pnlCoalBudBreak.allCost / pnlCoalBudVol / pnlAvgKursBudget) : 0;
       const pnlCostTonCoalActual = (pnlCoalActVol > 0 && pnlAvgKurs > 0) ? (pnlCoalActBreak.allCost / pnlCoalActVol / pnlAvgKurs) : 0;
+
+      // --- BvA Mud & BvA Topsoil (BEP memakai harga Mud/Topsoil; fallback harga OB) ---
+      const pnlSectorRatioSet = (sector, volKey, priceKey) => {
+        const priceAct = avgOfNormalized(costingActual, priceKey) || pnlAvgPriceOBActual;
+        const priceBud = avgOfNormalized(costingBudget, priceKey) || pnlAvgPriceOBBudget;
+        const aBreak = computeCostBreakdown(costingActual, sector);
+        const bBreak = computeCostBreakdown(costingBudget, sector);
+        const aVol = sumField((costingActual || []).filter(r => isRowSector(r, sector)), volKey);
+        const bVol = sumField((costingBudget || []).filter(r => isRowSector(r, sector)), volKey);
+        return {
+          bepBud: (priceBud > 0 && pnlAvgKursBudget > 0) ? (bBreak.dirIndir / priceBud / pnlAvgKursBudget) : 0,
+          bepAct: (priceAct > 0 && pnlAvgKurs > 0) ? (aBreak.dirIndir / priceAct / pnlAvgKurs) : 0,
+          bepNpvBud: (priceBud > 0 && pnlAvgKursBudget > 0) ? (bBreak.allCost / priceBud / pnlAvgKursBudget) : 0,
+          bepNpvAct: (priceAct > 0 && pnlAvgKurs > 0) ? (aBreak.allCost / priceAct / pnlAvgKurs) : 0,
+          costBud: (bVol > 0 && pnlAvgKursBudget > 0) ? (bBreak.allCost / bVol / pnlAvgKursBudget) : 0,
+          costAct: (aVol > 0 && pnlAvgKurs > 0) ? (aBreak.allCost / aVol / pnlAvgKurs) : 0
+        };
+      };
+      const pnlMudRatio = pnlSectorRatioSet('mud', 'Mud', 'Price Mud ($/BCM)');
+      const pnlTsRatio = pnlSectorRatioSet('ts', 'Topsoil', 'Price Topsoil ($/BCM)');
 
       const monthlyData = {};
       PNL_STRUCTURE.forEach((rowDef, idx) => {
@@ -3464,12 +3771,111 @@
           appendPnlRatioRow("BEP VOLUME", "BCM", pnlBepObBudget, pnlBepObActual, false);
           appendPnlRatioRow("BEP NPV After HO Cost", "BCM", pnlBepNpvObBudget, pnlBepNpvObActual, false);
           appendPnlRatioRow("COST PER BCM (After HO Cost)", "USD/BCM", pnlCostBcmObBudget, pnlCostBcmObActual, true);
+        } else if (currentPnlFormat === 'wg_mud' || currentPnlFormat === 'wg_ts') {
+          const rs = currentPnlFormat === 'wg_mud' ? pnlMudRatio : pnlTsRatio;
+          appendPnlRatioRow("BEP VOLUME", "BCM", rs.bepBud, rs.bepAct, false);
+          appendPnlRatioRow("BEP NPV After HO Cost", "BCM", rs.bepNpvBud, rs.bepNpvAct, false);
+          appendPnlRatioRow("COST PER BCM (After HO Cost)", "USD/BCM", rs.costBud, rs.costAct, true);
         } else {
           appendPnlRatioRow("BEP VOLUME", "BCM", pnlBepConsoBudget, pnlBepConsoActual, false);
           appendPnlRatioRow("BEP NPV After HO Cost", "BCM", pnlBepNpvConsoBudget, pnlBepNpvConsoActual, false);
           appendPnlRatioRow("COST PER BCM (After HO Cost)", "USD/BCM", pnlCostBcmConsoBudget, pnlCostBcmConsoActual, true);
         }
       }
+      renderPnlSectorBreakdown();
+    }
+
+    // Rincian Konsolidasi per sektor (OB, Coal, Mud, Topsoil) -> dijumlahkan menjadi Konsolidasi.
+    function renderPnlSectorBreakdown() {
+      const el = document.getElementById('pnl-sector-breakdown');
+      if (!el) return;
+      if (currentPnlFormat !== 'consolidated') { el.innerHTML = ''; return; }
+
+      const REV_KEYS = ["Revenue Coal", "Revenue OB", "Revenue Topsoil", "Revenue Mud", "Revenue Fuel Compensation", "Revenue Over Distance", "Revenue Rental", "Revenue Sediment Trap"];
+      const DED_KEYS = ["PPh 23", "Deposit 1% (Overburden Revenue)"];
+      const COST_KEYS = ["Repair & Maintenance Cost", "Employee Cost Direct", "Drill & Blasting Cost", "Leasing, Capex & Investation", "HRD & GA Operasional", "Logistik", "IT & Engineering", "Safety"];
+      const HO_KEYS = ["Biaya HO Balikpapan", "Lain-Lain (HO)"];
+      const sumKeys = (dataset, sector, keys) => keys.reduce((tot, k) =>
+        tot + (dataset || []).reduce((a, row) => a + getValByNormalizedKey(row, k) * pnlFactor(row, sector, { key: k }), 0), 0);
+      const calc = (dataset, sector, volKey) => {
+        const netRev = sumKeys(dataset, sector, REV_KEYS) - sumKeys(dataset, sector, DED_KEYS);
+        const cost = sumKeys(dataset, sector, COST_KEYS);
+        const allCost = cost + sumKeys(dataset, sector, HO_KEYS);
+        const vol = (dataset || []).reduce((a, row) => a + getValByNormalizedKey(row, volKey) * pnlFactor(row, sector, { isVol: true, volKey: volKey }), 0);
+        return { netRev, cost, allCost, npv: netRev - allCost, vol };
+      };
+      const sectors = [
+        { key: 'ob', label: 'Overburden', volKey: 'Overburden', unit: 'BCM' },
+        { key: 'coal', label: 'Coal', volKey: 'Coal', unit: 'TON' },
+        { key: 'mud', label: 'Mud', volKey: 'Mud', unit: 'BCM' },
+        { key: 'ts', label: 'Topsoil', volKey: 'Topsoil', unit: 'BCM' }
+      ];
+      const bud = filteredData.COSTING_BUDGET || [];
+      const act = filteredData.COSTING_ACTUAL || [];
+      const tot = { b: { netRev: 0, allCost: 0, npv: 0, vol: 0 }, a: { netRev: 0, allCost: 0, npv: 0, vol: 0 } };
+      const varCell = (b, a) => {
+        const d = a - b;
+        return `<td class="p-3 text-right font-extrabold ${d >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${d > 0 ? '+' : (d < 0 ? '-' : '')}${formatPlain(Math.abs(d))}</td>`;
+      };
+      let rows = '';
+      sectors.forEach(sc => {
+        const b = calc(bud, sc.key, sc.volKey);
+        const a = calc(act, sc.key, sc.volKey);
+        const eq = sc.key === 'coal' ? (1 / 1.3) : 1;
+        ['netRev', 'allCost', 'npv'].forEach(k => { tot.b[k] += b[k]; tot.a[k] += a[k]; });
+        tot.b.vol += b.vol * eq; tot.a.vol += a.vol * eq;
+        rows += `
+          <tr class="pnl-row-regular text-xs">
+            <td class="p-3 font-bold">${sc.label}</td>
+            <td class="p-3 text-right">${formatPlain(b.vol)} ${sc.unit}</td>
+            <td class="p-3 text-right font-extrabold">${formatPlain(a.vol)} ${sc.unit}</td>
+            <td class="p-3 text-right">${formatPlain(b.netRev)}</td>
+            <td class="p-3 text-right font-extrabold">${formatPlain(a.netRev)}</td>
+            <td class="p-3 text-right">${formatPlain(b.allCost)}</td>
+            <td class="p-3 text-right font-extrabold">${formatPlain(a.allCost)}</td>
+            <td class="p-3 text-right">${formatPlain(b.npv)}</td>
+            <td class="p-3 text-right font-extrabold">${formatPlain(a.npv)}</td>
+            ${varCell(b.npv, a.npv)}
+          </tr>`;
+      });
+      rows += `
+        <tr class="pnl-row-highlight text-xs">
+          <td class="p-3 pnl-highlight-title">TOTAL KONSOLIDASI</td>
+          <td class="p-3 text-right">${formatPlain(tot.b.vol)} BCM-EQ</td>
+          <td class="p-3 text-right">${formatPlain(tot.a.vol)} BCM-EQ</td>
+          <td class="p-3 text-right">${formatPlain(tot.b.netRev)}</td>
+          <td class="p-3 text-right">${formatPlain(tot.a.netRev)}</td>
+          <td class="p-3 text-right">${formatPlain(tot.b.allCost)}</td>
+          <td class="p-3 text-right">${formatPlain(tot.a.allCost)}</td>
+          <td class="p-3 text-right">${formatPlain(tot.b.npv)}</td>
+          <td class="p-3 text-right">${formatPlain(tot.a.npv)}</td>
+          ${varCell(tot.b.npv, tot.a.npv)}
+        </tr>`;
+
+      el.innerHTML = `
+        <div class="premium-card rounded-2xl p-6 shadow-sm">
+          <h3 class="text-sm font-extrabold tracking-tight mb-1" style="color: var(--app-text-main);">RINCIAN KONSOLIDASI PER SEKTOR</h3>
+          <p class="text-xs mb-4" style="color: var(--app-text-muted);">Konsolidasi = Overburden + Coal + Mud + Topsoil. Biaya bersama dialokasikan sesuai Workgroup / proporsi volume (IDR).</p>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left border-collapse text-xs min-w-[1100px]">
+              <thead>
+                <tr class="pnl-th-header text-[10px] uppercase tracking-wider font-extrabold">
+                  <th class="p-3">Sektor</th>
+                  <th class="p-3 text-right">Volume Budget</th>
+                  <th class="p-3 text-right">Volume Actual</th>
+                  <th class="p-3 text-right">Net Rev Budget</th>
+                  <th class="p-3 text-right">Net Rev Actual</th>
+                  <th class="p-3 text-right">All Cost Budget</th>
+                  <th class="p-3 text-right">All Cost Actual</th>
+                  <th class="p-3 text-right">NPV Budget</th>
+                  <th class="p-3 text-right">NPV Actual</th>
+                  <th class="p-3 text-right">Variance NPV</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
     }
 
     function renderReportTab() {
@@ -3658,6 +4064,7 @@
       reportLines.push(`*Revenue Volume* : IDR ${revVolumeText}`);
       reportLines.push(`*Rev Over Distance* : IDR ${revOverDistText}`);
       reportLines.push(`*Rev Fuel Comp* : IDR ${revFuelCompText}`);
+      reportLines.push(`*Revenue Rental* : IDR ${document.getElementById('kpi-rev-rental').innerText}`);
       reportLines.push(`*Total Gross Revenue* : IDR ${grossRevenueText}`);
       reportLines.push(`*Gross Profit* : IDR ${grossProfitText}`);
       reportLines.push(`*Leasing Capex & Inv* : IDR ${leasingCostText}`);
@@ -3712,45 +4119,166 @@
       renderFinanceTable();
     }
 
-    function renderFinanceTable() {
-      const head = document.getElementById('fin-table-head');
-      const body = document.getElementById('fin-table-body');
-      head.innerHTML = '';
-      body.innerHTML = '';
+    // ================= JURNAL (Finance & Operasional) =================
+    const journalCache = {};
+    const JOURNAL_TEXT_FIELDS = ["Date", "Site", "Workgroup", "Unit_No", "Model"];
 
-      const list = filteredData[currentFinTable] || [];
-      
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function formatJournalCell(h, v) {
+      if (v === undefined || v === null || v === '') return '<span style="opacity:.4">-</span>';
+      if (JOURNAL_TEXT_FIELDS.includes(h)) return escapeHtml(v);
+      if (typeof v === 'number') return v.toLocaleString('id-ID', { maximumFractionDigits: 4 });
+      if (/^-?\d+(\.\d+)?$/.test(String(v).trim())) return parseFloat(v).toLocaleString('id-ID', { maximumFractionDigits: 4 });
+      return escapeHtml(v);
+    }
+
+    function renderJournalTable(sheetName, prefix, masterToggleFn) {
+      const head = document.getElementById(`${prefix}-table-head`);
+      const body = document.getElementById(`${prefix}-table-body`);
+      const info = document.getElementById(`${prefix}-table-info`);
+      if (!head || !body) return;
+
+      const columns = SCHEMA_HEADERS[sheetName];
+      const list = filteredData[sheetName] || [];
+      const shown = tablePageLimit > 0 ? list.slice(0, tablePageLimit) : list;
+      journalCache[sheetName] = shown;
+
       head.innerHTML = `
-        <tr class="pnl-th-header text-xs">
-          <th class="p-3 w-8"><input type="checkbox" id="fin-check-all" class="btn-op-allowed" onchange="toggleAllFinanceRows(this)"></th>
-          <th class="p-3">Date</th>
-          <th class="p-3">Site</th>
-          <th class="p-3">Workgroup</th>
-          <th class="p-3 text-right">Revenue Coal</th>
-          <th class="p-3 text-right">Revenue OB</th>
-        </tr>
-      `;
+        <tr class="text-[11px]">
+          <th class="p-3 sticky-col"><input type="checkbox" id="${prefix}-check-all" class="btn-op-allowed" onchange="${masterToggleFn}(this)"></th>
+          <th class="p-3">Aksi</th>
+          ${columns.map(h => `<th class="p-3 ${JOURNAL_TEXT_FIELDS.includes(h) ? '' : 'text-right'}">${escapeHtml(h)}</th>`).join('')}
+        </tr>`;
 
       if (list.length === 0) {
-        body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400 font-bold">Belum ada transaksi finance.</td></tr>';
+        body.innerHTML = `<tr><td colspan="${columns.length + 2}" class="p-4 text-center text-slate-400 font-bold">Belum ada data pada filter saat ini.</td></tr>`;
+        if (info) info.innerText = '';
         return;
       }
 
-      let rowsHtml = '';
-      list.slice(0, tablePageLimit).forEach(row => {
+      body.innerHTML = shown.map((row, idx) => {
         const rowKey = encodeURIComponent(JSON.stringify(row));
-        rowsHtml += `
+        const idAttr = row.id !== undefined && row.id !== "" ? row.id : "";
+        return `
           <tr class="pnl-row-regular text-xs">
-            <td class="p-3"><input type="checkbox" class="fin-row-check btn-op-allowed" data-id="${row.id !== undefined && row.id !== "" ? row.id : ""}" data-row="${rowKey}"></td>
-            <td class="p-3 font-semibold">${row["Date"] || ""}</td>
-            <td class="p-3 font-extrabold text-amber-500">${row["Site"] || ""}</td>
-            <td class="p-3 font-bold">${row["Workgroup"] || ""}</td>
-            <td class="p-3 text-right font-extrabold text-emerald-400">${formatRupiah(parseFloat(row["Revenue Coal"]))}</td>
-            <td class="p-3 text-right font-extrabold text-emerald-400">${formatRupiah(parseFloat(row["Revenue OB"]))}</td>
-          </tr>
-        `;
+            <td class="p-3 sticky-col"><input type="checkbox" class="${prefix}-row-check btn-op-allowed" data-id="${idAttr}" data-row="${rowKey}"></td>
+            <td class="p-2"><button onclick="openRecordEditModal('${sheetName}', ${idx})" class="btn-op-allowed px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded-lg transition-all shadow-sm">Edit</button></td>
+            ${columns.map(h => `<td class="p-3 ${JOURNAL_TEXT_FIELDS.includes(h) ? (h === 'Site' ? 'font-extrabold text-amber-500' : 'font-semibold') : 'text-right'}">${formatJournalCell(h, row[h])}</td>`).join('')}
+          </tr>`;
+      }).join('');
+
+      if (info) info.innerText = `Menampilkan ${shown.length} dari ${list.length} baris • ${columns.length} kolom`;
+    }
+
+    function renderFinanceTable() {
+      renderJournalTable(currentFinTable, 'fin', 'toggleAllFinanceRows');
+    }
+
+    function changeJournalLimit(val) {
+      tablePageLimit = parseInt(val, 10) || 0;
+      document.querySelectorAll('.journal-limit').forEach(sel => { sel.value = String(tablePageLimit); });
+      renderFinanceTable();
+      renderOpsTable();
+    }
+
+    let recordEditState = null;
+
+    function openRecordEditModal(sheetName, idx) {
+      const row = (journalCache[sheetName] || [])[idx];
+      if (!row) return;
+      recordEditState = { sheetName, row };
+      const sites = systemDb.JOBSITES || [];
+      const inputCls = 'w-full border rounded-xl p-2.5 text-xs';
+
+      document.getElementById('record-edit-fields').innerHTML = SCHEMA_HEADERS[sheetName].map((h, i) => {
+        const val = (row[h] === undefined || row[h] === null) ? '' : row[h];
+        let input;
+        if (h === 'Date') {
+          input = `<input type="date" data-field-idx="${i}" required value="${escapeHtml(standardizeDate(val))}" class="${inputCls}">`;
+        } else if (h === 'Site') {
+          const opts = [...new Set([...sites, String(val)].filter(Boolean))];
+          input = `<select data-field-idx="${i}" required class="${inputCls}">${opts.map(s => `<option value="${escapeHtml(s)}" ${s === String(val) ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('')}</select>`;
+        } else if (h === 'Workgroup') {
+          input = `<input type="text" list="wg-options" data-field-idx="${i}" value="${escapeHtml(val)}" class="${inputCls}">`;
+        } else if (JOURNAL_TEXT_FIELDS.includes(h)) {
+          input = `<input type="text" data-field-idx="${i}" value="${escapeHtml(val)}" class="${inputCls}">`;
+        } else {
+          input = `<input type="number" step="any" data-field-idx="${i}" value="${escapeHtml(val)}" class="${inputCls}">`;
+        }
+        return `<div><label class="block text-[9px] font-bold text-slate-400 uppercase mb-1 truncate" title="${escapeHtml(h)}">${escapeHtml(h)}</label>${input}</div>`;
+      }).join('');
+
+      const labels = { COSTING_BUDGET: 'Costing Budget', COSTING_ACTUAL: 'Costing Actual', LOG_PRODUKSI: 'Log Produksi', EQUIPMENT_PERFORMANCE: 'Equipment Performance' };
+      document.getElementById('record-edit-subtitle').innerText = `${labels[sheetName] || sheetName} • ${row["Date"] || '-'} • ${row["Site"] || '-'} • ${row["Workgroup"] || '-'}`;
+      document.getElementById('record-edit-modal').classList.remove('hidden');
+    }
+
+    function closeRecordEditModal() {
+      document.getElementById('record-edit-modal').classList.add('hidden');
+      recordEditState = null;
+    }
+
+    async function handleRecordEditSubmit(e) {
+      e.preventDefault();
+      if (!recordEditState) return;
+      const { sheetName, row } = recordEditState;
+      const headers = SCHEMA_HEADERS[sheetName];
+      const updated = {};
+      document.querySelectorAll('#record-edit-fields [data-field-idx]').forEach(el => {
+        const h = headers[parseInt(el.dataset.fieldIdx, 10)];
+        const raw = String(el.value || '');
+        if (h === 'Date') updated[h] = standardizeDate(raw);
+        else if (JOURNAL_TEXT_FIELDS.includes(h)) updated[h] = raw.trim();
+        else {
+          const n = parseFloat(raw);
+          updated[h] = isNaN(n) ? 0 : n;
+        }
       });
-      body.innerHTML = rowsHtml;
+      if (!updated["Date"] || !updated["Site"]) {
+        showCustomAlert("Tanggal dan Jobsite wajib diisi.", "error");
+        return;
+      }
+
+      const btn = document.getElementById('record-edit-save');
+      btn.disabled = true;
+      btn.innerText = 'Menyimpan...';
+      try {
+        const useSupabase = !!(window.BIMA_SB && isSupabaseConnected);
+        const hasId = row.id !== undefined && row.id !== null && row.id !== '';
+        if (useSupabase) {
+          if (!hasId) throw new Error("Baris ini tidak memiliki ID Supabase sehingga tidak dapat diperbarui.");
+          const res = await window.BIMA_SB.updateRecord(sheetName, isNaN(row.id) ? row.id : Number(row.id), updated);
+          if (!res.success) throw new Error(res.error);
+          showCustomAlert("Data berhasil diperbarui di Supabase!");
+        } else {
+          updateLocalTransactionRow(sheetName, row, updated);
+          populateDateCheckboxes();
+          applyFilters();
+          showCustomAlert("Data berhasil diperbarui!");
+        }
+        closeRecordEditModal();
+      } catch (err) {
+        showCustomAlert("Gagal memperbarui data: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'Simpan Perubahan';
+      }
+    }
+
+    function updateLocalTransactionRow(sheetName, oldRow, updated) {
+      const matrix = systemDb[sheetName];
+      if (!matrix || matrix.length < 2) return;
+      const headers = matrix[0];
+      for (let i = 1; i < matrix.length; i++) {
+        const isMatch = headers.every((h, hi) => String(matrix[i][hi] ?? "") === String(oldRow[h] ?? ""));
+        if (isMatch) {
+          headers.forEach((h, hi) => { if (updated[h] !== undefined) matrix[i][hi] = updated[h]; });
+          break;
+        }
+      }
     }
 
     // Menandai/melepas semua checkbox baris tabel Finance sekaligus lewat checkbox header.
@@ -3838,72 +4366,7 @@
     }
 
     function renderOpsTable() {
-      const head = document.getElementById('ops-table-head');
-      const body = document.getElementById('ops-table-body');
-      head.innerHTML = '';
-      body.innerHTML = '';
-
-      const list = filteredData[currentOpsTable] || [];
-
-      if (currentOpsTable === 'LOG_PRODUKSI') {
-        head.innerHTML = `
-          <tr class="pnl-th-header text-xs">
-            <th class="p-3 w-8"><input type="checkbox" id="ops-check-all" class="btn-op-allowed" onchange="toggleAllOpsRows(this)"></th>
-            <th class="p-3">Date</th>
-            <th class="p-3">Site</th>
-            <th class="p-3">Workgroup</th>
-            <th class="p-3 text-right">Plan Prod</th>
-            <th class="p-3 text-right">Act Prod</th>
-          </tr>
-        `;
-        if (list.length === 0) {
-          body.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400 font-bold">Belum ada data log produksi.</td></tr>';
-          return;
-        }
-        let logRowsHtml = '';
-        list.slice(0, tablePageLimit).forEach(row => {
-          const rowKey = encodeURIComponent(JSON.stringify(row));
-          logRowsHtml += `
-            <tr class="pnl-row-regular text-xs">
-              <td class="p-3"><input type="checkbox" class="ops-row-check btn-op-allowed" data-id="${row.id !== undefined && row.id !== "" ? row.id : ""}" data-row="${rowKey}"></td>
-              <td class="p-3 font-semibold">${row["Date"] || ""}</td>
-              <td class="p-3 font-extrabold text-amber-500">${row["Site"] || ""}</td>
-              <td class="p-3 font-bold">${row["Workgroup"] || ""}</td>
-              <td class="p-3 text-right font-medium opacity-80">${formatPlain(parseFloat(row["Plan Production"]))}</td>
-              <td class="p-3 text-right font-extrabold">${formatPlain(parseFloat(row["Actual Production"]))}</td>
-            </tr>
-          `;
-        });
-        body.innerHTML = logRowsHtml;
-      } else {
-        head.innerHTML = `
-          <tr class="pnl-th-header text-xs">
-            <th class="p-3 w-8"><input type="checkbox" id="ops-check-all" class="btn-op-allowed" onchange="toggleAllOpsRows(this)"></th>
-            <th class="p-3">Date</th>
-            <th class="p-3">Site</th>
-            <th class="p-3">Unit No</th>
-            <th class="p-3">Model</th>
-          </tr>
-        `;
-        if (list.length === 0) {
-          body.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400 font-bold">Belum ada data equipment.</td></tr>';
-          return;
-        }
-        let equipRowsHtml = '';
-        list.slice(0, tablePageLimit).forEach(row => {
-          const rowKey = encodeURIComponent(JSON.stringify(row));
-          equipRowsHtml += `
-            <tr class="pnl-row-regular text-xs">
-              <td class="p-3"><input type="checkbox" class="ops-row-check btn-op-allowed" data-id="${row.id !== undefined && row.id !== "" ? row.id : ""}" data-row="${rowKey}"></td>
-              <td class="p-3 font-semibold">${row["Date"] || ""}</td>
-              <td class="p-3 font-extrabold text-amber-500">${row["Site"] || ""}</td>
-              <td class="p-3 font-bold text-emerald-400">${row["Unit_No"] || ""}</td>
-              <td class="p-3 font-semibold">${row["Model"] || ""}</td>
-            </tr>
-          `;
-        });
-        body.innerHTML = equipRowsHtml;
-      }
+      renderJournalTable(currentOpsTable, 'ops', 'toggleAllOpsRows');
     }
 
     // Menandai/melepas semua checkbox baris tabel Operasional sekaligus lewat checkbox header.
@@ -4127,12 +4590,12 @@
 
     function switchTab(tabId) {
       currentTab = tabId;
-      const tabs = ['dashboard', 'pnl', 'report', 'finance', 'operasional', 'uplinker', 'usermgr'];
+      const tabs = ['dashboard', 'pnl', 'report', 'finance', 'operasional', 'uplinker', 'usermgr', 'jobsite'];
       
       tabs.forEach(t => {
         const block = document.getElementById(`tab-${t}`);
         if (block) {
-          block.style.display = t === tabId ? (t === 'finance' || t === 'operasional' || t === 'usermgr' ? 'grid' : 'block') : 'none';
+          block.style.display = t === tabId ? (t === 'usermgr' || t === 'jobsite' ? 'grid' : 'block') : 'none';
         }
       });
 
@@ -4160,6 +4623,8 @@
       if (mobOps) mobOps.className = tabId === 'operasional' ? 'flex flex-col items-center text-[10px] font-bold text-amber-500' : 'flex flex-col items-center text-[10px] font-bold text-slate-400';
 
       enforceRoleAccess();
+      if (tabId === 'jobsite') renderJobsiteList();
+      if (tabId === 'usermgr') renderUsersList();
     }
 
     function drilldown(sheetName, column, matchValue) {
