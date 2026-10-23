@@ -443,6 +443,14 @@
       border-right: 1px solid var(--table-border);
     }
 
+    /* Panel Cost Control Budget vs Actual */
+    .ci-seg { background-color: var(--input-bg); border: 1px solid var(--app-card-border); }
+    .ci-seg button { color: var(--app-text-muted); }
+    .ci-seg button.active { background-color: #d97706; color: #fff; }
+    .ci-chip { border: 1px solid var(--app-card-border); background-color: var(--input-bg); color: var(--app-text-muted); }
+    .ci-chip.active { border-color: #d97706; color: #d97706; background-color: rgba(217, 119, 6, 0.12); }
+    .ci-stat { background-color: var(--input-bg); border: 1px solid var(--app-card-border); }
+
     @media (max-width: 380px) {
       /* Sembunyikan label teks status sinkron di layar sangat sempit,
          titik indikator warna tetap terlihat */
@@ -940,6 +948,88 @@
             </div>
             <div class="h-56 flex items-center justify-center"><canvas id="chart-cost-share"></canvas></div>
             <div class="text-[9px] text-center mt-2" style="color: var(--app-text-faint);">Proporsi Direct vs Indirect vs Head Office</div>
+          </div>
+        </div>
+
+        <!-- Cost Control: Budget vs Actual per Item Biaya -->
+        <div class="premium-card p-5 rounded-2xl shadow-sm space-y-4" id="cost-item-panel">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 class="text-xs font-black flex items-center gap-2" style="color: var(--app-text-main);">
+                <span class="w-2 h-4 bg-rose-500 rounded-full"></span> COST CONTROL: BUDGET vs ACTUAL PER ITEM BIAYA
+              </h4>
+              <p class="text-[10px] mt-1" style="color: var(--app-text-muted);">Mengikuti filter jobsite &amp; tanggal. Arahkan kursor untuk detail, klik bar untuk melihat tren bulanan item.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="ci-seg flex rounded-lg p-0.5 text-[10px] font-bold">
+                <button onclick="setCostItemView('chart')" data-ci-view="chart" class="active px-2.5 py-1 rounded-md transition-all">Grafik</button>
+                <button onclick="setCostItemView('table')" data-ci-view="table" class="px-2.5 py-1 rounded-md transition-all">Tabel</button>
+              </div>
+              <div class="ci-seg flex rounded-lg p-0.5 text-[10px] font-bold" title="Urutkan item">
+                <button onclick="setCostItemSort('default')" data-ci-sort="default" class="active px-2.5 py-1 rounded-md transition-all">Urutan COA</button>
+                <button onclick="setCostItemSort('budget')" data-ci-sort="budget" class="px-2.5 py-1 rounded-md transition-all">Budget Terbesar</button>
+                <button onclick="setCostItemSort('variance')" data-ci-sort="variance" class="px-2.5 py-1 rounded-md transition-all">Paling Over</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="ci-stat rounded-xl p-3">
+              <p class="text-[9px] font-bold uppercase" style="color: var(--app-text-faint);">Total Budget (9 Item)</p>
+              <h4 id="ci-sum-budget" class="text-sm font-black truncate" style="color: var(--app-text-main);">0</h4>
+            </div>
+            <div class="ci-stat rounded-xl p-3">
+              <p class="text-[9px] font-bold uppercase" style="color: var(--app-text-faint);">Total Actual</p>
+              <h4 id="ci-sum-actual" class="text-sm font-black truncate" style="color: var(--app-text-main);">0</h4>
+            </div>
+            <div class="ci-stat rounded-xl p-3">
+              <p class="text-[9px] font-bold uppercase" style="color: var(--app-text-faint);">Variance (Budget − Actual)</p>
+              <h4 id="ci-sum-var" class="text-sm font-black truncate">0</h4>
+            </div>
+            <div class="ci-stat rounded-xl p-3">
+              <p class="text-[9px] font-bold uppercase" style="color: var(--app-text-faint);">Item Over Budget</p>
+              <h4 id="ci-sum-over" class="text-sm font-black truncate" style="color: var(--app-text-main);">0 / 9</h4>
+            </div>
+          </div>
+
+          <div id="ci-chart-view" class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            <div class="lg:col-span-3">
+              <div class="flex items-center gap-4 text-[10px] font-bold mb-2" style="color: var(--app-text-muted);">
+                <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 rounded-sm" style="background: rgba(100,116,139,0.45);"></span>Budget</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-1.5 rounded-sm" style="background: #d97706;"></span>Actual</span>
+                <span class="flex items-center gap-1.5"><span class="text-rose-400">▲</span>Over budget</span>
+                <span class="flex items-center gap-1.5"><span class="text-emerald-400">▼</span>Di bawah budget</span>
+              </div>
+              <div class="h-80"><canvas id="chart-cost-items"></canvas></div>
+            </div>
+            <div class="lg:col-span-2 space-y-3">
+              <div class="flex flex-wrap gap-1.5" id="ci-item-chips"></div>
+              <div class="flex items-baseline justify-between gap-2">
+                <p id="ci-trend-title" class="text-[11px] font-black truncate" style="color: var(--app-text-main);">Tren Bulanan</p>
+                <div class="ci-seg flex rounded-lg p-0.5 text-[10px] font-bold shrink-0">
+                  <button onclick="setCostTrendMode('monthly')" data-ci-trend="monthly" class="active px-2 py-0.5 rounded-md transition-all">Bulanan</button>
+                  <button onclick="setCostTrendMode('cumulative')" data-ci-trend="cumulative" class="px-2 py-0.5 rounded-md transition-all">Kumulatif</button>
+                </div>
+              </div>
+              <div class="h-52"><canvas id="chart-cost-item-trend"></canvas></div>
+              <p id="ci-trend-note" class="text-[10px] font-semibold" style="color: var(--app-text-faint);"></p>
+            </div>
+          </div>
+
+          <div id="ci-table-view" class="hidden overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left border-collapse text-xs min-w-[720px]">
+              <thead>
+                <tr class="pnl-th-header text-[10px] uppercase tracking-wider font-extrabold">
+                  <th class="p-3">Item Biaya</th>
+                  <th class="p-3 text-right">Budget (IDR)</th>
+                  <th class="p-3 text-right">Actual (IDR)</th>
+                  <th class="p-3 text-right">Variance (IDR)</th>
+                  <th class="p-3 text-right">Serapan</th>
+                  <th class="p-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody id="ci-table-rows"></tbody>
+            </table>
           </div>
         </div>
 
@@ -1724,7 +1814,7 @@
           scheduleFullRefresh();
 
           if (syncStatus) syncStatus.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
-          if (syncText) syncText.innerText = 'SUPABASE ONLINE';
+          if (syncText) syncText.innerText = 'ONLINE';
         }, (err) => {
           console.warn(`Supabase sync note for ${tableName}:`, err);
           if (syncStatus) syncStatus.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500';
@@ -3176,6 +3266,7 @@
 
       generateKPIInsights(actOB, tarOB, actCoal, tarCoal, actRain, tarRain, actSlip, tarSlip, totalCost, totalTargetCost, opProfit);
       updateDashboardCharts(totalDirectCost, totalIndirectCost, headOfficeCost);
+      renderCostItemCharts();
     }
 
     function generateKPIInsights(actOB, tarOB, actCoal, tarCoal, actRain, tarRain, actSlip, tarSlip, totalCost, targetCost, opProfit) {
@@ -3377,6 +3468,291 @@
           }
         }
       });
+    }
+
+    // ================= COST CONTROL: BUDGET vs ACTUAL PER ITEM =================
+    const COST_ITEMS = [
+      { key: "Repair & Maintenance Cost", short: "Repair & Maint." },
+      { key: "Employee Cost Direct", short: "Employee Direct" },
+      { key: "Drill & Blasting Cost", short: "Drill & Blasting" },
+      { key: "Leasing, Capex & Investation", short: "Leasing & Capex" },
+      { key: "HRD & GA Operasional", short: "HRD & GA" },
+      { key: "Logistik", short: "Logistik" },
+      { key: "IT & Engineering", short: "IT & Engineering" },
+      { key: "Safety", short: "Safety" },
+      { key: "Biaya HO Balikpapan", short: "HO Balikpapan" }
+    ];
+    let costItemSort = 'default';
+    let costItemSelected = 0;     // index pada COST_ITEMS
+    let costTrendMode = 'monthly';
+    let costItemRows = [];        // urutan tampilan saat ini
+
+    function fmtCompactIDR(v) {
+      const a = Math.abs(v), sign = v < 0 ? '-' : '';
+      if (a >= 1e12) return sign + (a / 1e12).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + ' T';
+      if (a >= 1e9) return sign + (a / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + ' M';
+      if (a >= 1e6) return sign + (a / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + ' Jt';
+      if (a >= 1e3) return sign + (a / 1e3).toLocaleString('id-ID', { maximumFractionDigits: 0 }) + ' Rb';
+      return sign + Math.round(a).toLocaleString('id-ID');
+    }
+
+    // Status serapan biaya: <=95% aman, 95–100% waspada, >100% over
+    function costStatus(bud, act) {
+      if (bud <= 0 && act <= 0) return { code: 'none', label: 'NO DATA', icon: '–', cls: '', color: null };
+      if (bud <= 0) return { code: 'over', label: 'TANPA BUDGET', icon: '▲', cls: 'text-rose-400', color: '#fb7185' };
+      const r = act / bud;
+      if (r > 1) return { code: 'over', label: 'OVER', icon: '▲', cls: 'text-rose-400', color: '#fb7185' };
+      if (r >= 0.95) return { code: 'warn', label: 'WASPADA', icon: '●', cls: 'text-amber-400', color: '#fbbf24' };
+      return { code: 'ok', label: 'AMAN', icon: '▼', cls: 'text-emerald-400', color: '#34d399' };
+    }
+
+    function collectCostItemData() {
+      const months = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+      const bud = filteredData.COSTING_BUDGET || [];
+      const act = filteredData.COSTING_ACTUAL || [];
+      const res = COST_ITEMS.map((it, i) => ({ idx: i, key: it.key, short: it.short, budget: 0, actual: 0, mBud: Array(12).fill(0), mAct: Array(12).fill(0) }));
+      const add = (dataset, totKey, mKey) => dataset.forEach(row => {
+        const stdD = standardizeDate(row["Date"] || "");
+        const mIdx = stdD ? months.indexOf(stdD.split('-')[1]) : -1;
+        res.forEach(r => {
+          const v = getValByNormalizedKey(row, r.key);
+          if (!v) return;
+          r[totKey] += v;
+          if (mIdx !== -1) r[mKey][mIdx] += v;
+        });
+      });
+      add(bud, 'budget', 'mBud');
+      add(act, 'actual', 'mAct');
+      return res;
+    }
+
+    function costChartTheme() {
+      const isDark = document.documentElement.classList.contains('dark');
+      return {
+        isDark,
+        label: isDark ? '#f8fafc' : '#0f172a',
+        tick: isDark ? '#cbd5e1' : '#475569',
+        grid: isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+        surface: isDark ? '#0f172a' : '#ffffff',
+        budget: isDark ? 'rgba(100, 116, 139, 0.45)' : 'rgba(148, 163, 184, 0.45)',
+        budgetHover: isDark ? 'rgba(100, 116, 139, 0.7)' : 'rgba(148, 163, 184, 0.7)',
+        actual: '#d97706'
+      };
+    }
+
+    const costTooltip = (t) => ({
+      backgroundColor: t.isDark ? '#1e293b' : '#ffffff',
+      titleColor: t.label, bodyColor: t.tick, footerColor: t.label,
+      borderColor: t.isDark ? '#334155' : '#e2e8f0', borderWidth: 1,
+      padding: 10, boxPadding: 4, usePointStyle: true,
+      titleFont: { weight: 'bold' }, footerFont: { weight: 'bold' }
+    });
+
+    function renderCostItemCharts() {
+      const panel = document.getElementById('cost-item-panel');
+      if (!panel || typeof Chart === 'undefined') return;
+      const data = collectCostItemData();
+      const t = costChartTheme();
+
+      // Ringkasan
+      const sumB = data.reduce((a, r) => a + r.budget, 0);
+      const sumA = data.reduce((a, r) => a + r.actual, 0);
+      const overCount = data.filter(r => costStatus(r.budget, r.actual).code === 'over').length;
+      document.getElementById('ci-sum-budget').innerText = 'Rp ' + fmtCompactIDR(sumB);
+      document.getElementById('ci-sum-actual').innerText = 'Rp ' + fmtCompactIDR(sumA) + (sumB > 0 ? `  (${(sumA / sumB * 100).toFixed(1)}%)` : '');
+      const varEl = document.getElementById('ci-sum-var');
+      const sumVar = sumB - sumA;
+      varEl.innerText = (sumVar >= 0 ? '▼ Hemat Rp ' : '▲ Over Rp ') + fmtCompactIDR(Math.abs(sumVar));
+      varEl.className = 'text-sm font-black truncate ' + (sumVar >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      document.getElementById('ci-sum-over').innerText = `${overCount} / ${data.length}`;
+
+      // Urutan
+      costItemRows = [...data];
+      if (costItemSort === 'budget') costItemRows.sort((a, b) => b.budget - a.budget);
+      if (costItemSort === 'variance') {
+        // Serapan tertinggi dulu (actual tanpa budget dianggap paling over); item tanpa data di akhir
+        const score = (r) => (r.budget <= 0 && r.actual <= 0) ? -1 : (r.budget <= 0 ? Infinity : r.actual / r.budget);
+        costItemRows.sort((a, b) => score(b) - score(a) || (b.actual - b.budget) - (a.actual - a.budget));
+      }
+
+      // Tabel
+      document.getElementById('ci-table-rows').innerHTML = costItemRows.map(r => {
+        const st = costStatus(r.budget, r.actual);
+        const v = r.budget - r.actual;
+        return `<tr class="pnl-row-regular text-xs cursor-pointer" onclick="selectCostItem(${r.idx}); setCostItemView('chart');">
+          <td class="p-3 font-bold">${r.key}</td>
+          <td class="p-3 text-right">${formatRupiah(r.budget)}</td>
+          <td class="p-3 text-right font-extrabold">${formatRupiah(r.actual)}</td>
+          <td class="p-3 text-right font-extrabold ${v >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${v >= 0 ? '' : '-'}${formatRupiah(Math.abs(v))}</td>
+          <td class="p-3 text-right">${r.budget > 0 ? (r.actual / r.budget * 100).toFixed(1) + '%' : '-'}</td>
+          <td class="p-3 text-center"><span class="font-extrabold text-[10px] ${st.cls}">${st.icon} ${st.label}</span></td>
+        </tr>`;
+      }).join('') + `<tr class="pnl-row-highlight text-xs">
+          <td class="p-3 pnl-highlight-title">TOTAL</td>
+          <td class="p-3 text-right">${formatRupiah(sumB)}</td>
+          <td class="p-3 text-right">${formatRupiah(sumA)}</td>
+          <td class="p-3 text-right">${sumVar >= 0 ? '' : '-'}${formatRupiah(Math.abs(sumVar))}</td>
+          <td class="p-3 text-right">${sumB > 0 ? (sumA / sumB * 100).toFixed(1) + '%' : '-'}</td>
+          <td class="p-3"></td>
+        </tr>`;
+
+      // Chips item
+      document.getElementById('ci-item-chips').innerHTML = COST_ITEMS.map((it, i) =>
+        `<button onclick="selectCostItem(${i})" class="ci-chip ${i === costItemSelected ? 'active' : ''} px-2 py-1 rounded-lg text-[10px] font-bold transition-all">${it.short}</button>`).join('');
+
+      // Label persentase di ujung bar (plugin lokal)
+      const endLabels = {
+        id: 'ciEndLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const mB = chart.getDatasetMeta(0), mA = chart.getDatasetMeta(1);
+          ctx.save();
+          ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+          ctx.textBaseline = 'middle';
+          costItemRows.forEach((r, i) => {
+            const bB = mB.data[i], bA = mA.data[i];
+            if (!bB || !bA) return;
+            const st = costStatus(r.budget, r.actual);
+            const x = Math.max(bB.x, bA.x) + 6;
+            const pct = r.budget > 0 ? (r.actual / r.budget * 100).toFixed(0) + '%' : (r.actual > 0 ? 'n/a' : '');
+            if (!pct) return;
+            ctx.fillStyle = st.color || t.tick;
+            ctx.fillText(st.icon, x, bB.y);
+            ctx.fillStyle = t.label;
+            ctx.fillText(pct, x + 11, bB.y);
+          });
+          ctx.restore();
+        }
+      };
+
+      if (charts.costItems) charts.costItems.destroy();
+      charts.costItems = new Chart(document.getElementById('chart-cost-items').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: costItemRows.map(r => r.short),
+          datasets: [
+            { label: 'Budget', data: costItemRows.map(r => r.budget), backgroundColor: t.budget, hoverBackgroundColor: t.budgetHover,
+              borderRadius: 4, borderSkipped: false, grouped: false, barPercentage: 0.9, categoryPercentage: 0.85, order: 2 },
+            { label: 'Actual', data: costItemRows.map(r => r.actual), backgroundColor: t.actual, hoverBackgroundColor: '#b45309',
+              borderRadius: 4, borderSkipped: false, grouped: false, barPercentage: 0.4, categoryPercentage: 0.85, order: 1 }
+          ]
+        },
+        plugins: [endLabels],
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { right: 52 } },
+          interaction: { mode: 'index', axis: 'y', intersect: false },
+          onHover: (e, els) => { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+          onClick: (e, els) => { if (els.length) selectCostItem(costItemRows[els[0].index].idx); },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              ...costTooltip(t),
+              callbacks: {
+                title: (items) => costItemRows[items[0].dataIndex].key,
+                label: (c) => ` ${c.dataset.label}: Rp ${formatRupiah(c.raw)}`,
+                footer: (items) => {
+                  const r = costItemRows[items[0].dataIndex];
+                  const v = r.budget - r.actual;
+                  const st = costStatus(r.budget, r.actual);
+                  return [
+                    `Variance: ${v >= 0 ? 'hemat' : 'over'} Rp ${formatRupiah(Math.abs(v))}`,
+                    `Serapan: ${r.budget > 0 ? (r.actual / r.budget * 100).toFixed(1) + '%' : '-'}  ${st.icon} ${st.label}`,
+                    'Klik untuk tren bulanan'
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: t.grid }, border: { display: false },
+                 ticks: { color: t.tick, font: { weight: 'bold', size: 10 }, callback: (v) => fmtCompactIDR(v), maxTicksLimit: 6 } },
+            y: { grid: { display: false }, border: { display: false },
+                 ticks: { color: (c) => costItemRows[c.index] && costItemRows[c.index].idx === costItemSelected ? '#d97706' : t.tick, font: { weight: 'bold', size: 10 } } }
+          }
+        }
+      });
+
+      renderCostItemTrend(data, t);
+    }
+
+    function renderCostItemTrend(data, t) {
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+      const r = data[costItemSelected];
+      const cum = (arr) => { let s = 0; return arr.map(v => (s += v)); };
+      const isCum = costTrendMode === 'cumulative';
+      const bud = isCum ? cum(r.mBud) : r.mBud;
+      const act = isCum ? cum(r.mAct) : r.mAct;
+
+      // Tampilkan hanya rentang bulan yang punya data supaya grafik tidak penuh bulan kosong
+      let first = 0, last = 11;
+      while (first < 11 && r.mBud[first] === 0 && r.mAct[first] === 0) first++;
+      while (last > first && r.mBud[last] === 0 && r.mAct[last] === 0) last--;
+      const hasData = r.mBud.some(v => v) || r.mAct.some(v => v);
+      if (!hasData) { first = 0; last = 11; }
+      const sl = (a) => a.slice(first, last + 1);
+
+      document.getElementById('ci-trend-title').innerText = `Tren ${isCum ? 'Kumulatif' : 'Bulanan'}: ${r.key}`;
+      const overMonths = r.mAct.filter((v, i) => r.mBud[i] > 0 ? v > r.mBud[i] : v > 0).length;
+      const st = costStatus(r.budget, r.actual);
+      document.getElementById('ci-trend-note').innerHTML = !hasData ? 'Belum ada data budget maupun actual untuk item ini pada filter saat ini.' :
+        `Budget Rp ${fmtCompactIDR(r.budget)} • Actual Rp ${fmtCompactIDR(r.actual)} • <span class="${st.cls} font-extrabold">${st.icon} ${st.label}</span> • ${overMonths} bulan over budget`;
+
+      if (charts.costItemTrend) charts.costItemTrend.destroy();
+      charts.costItemTrend = new Chart(document.getElementById('chart-cost-item-trend').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: sl(monthNames),
+          datasets: [
+            { type: 'line', label: 'Budget', data: sl(bud), borderColor: t.tick, borderDash: [5, 4], borderWidth: 2,
+              pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: t.tick, tension: 0, order: 1 },
+            { type: 'bar', label: 'Actual', data: sl(act), backgroundColor: t.actual, hoverBackgroundColor: '#b45309',
+              borderRadius: 4, maxBarThickness: 26, order: 2 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { color: t.label, boxWidth: 10, usePointStyle: true, font: { weight: 'bold', size: 10 } } },
+            tooltip: {
+              ...costTooltip(t),
+              callbacks: {
+                label: (c) => ` ${c.dataset.label}: Rp ${formatRupiah(c.raw)}`,
+                footer: (items) => {
+                  const b = items.find(i => i.dataset.label === 'Budget'), a = items.find(i => i.dataset.label === 'Actual');
+                  if (!b || !a) return '';
+                  const v = b.raw - a.raw;
+                  return `Variance: ${v >= 0 ? 'hemat' : 'over'} Rp ${formatRupiah(Math.abs(v))}${b.raw > 0 ? ` (${(a.raw / b.raw * 100).toFixed(1)}%)` : ''}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: t.grid }, border: { display: false },
+                 ticks: { color: t.tick, font: { weight: 'bold', size: 10 }, callback: (v) => fmtCompactIDR(v), maxTicksLimit: 5 } },
+            x: { grid: { display: false }, border: { display: false }, ticks: { color: t.tick, font: { weight: 'bold', size: 10 } } }
+          }
+        }
+      });
+    }
+
+    function selectCostItem(i) { costItemSelected = i; renderCostItemCharts(); }
+    function setCostTrendMode(m) {
+      costTrendMode = m;
+      document.querySelectorAll('[data-ci-trend]').forEach(b => b.classList.toggle('active', b.dataset.ciTrend === m));
+      renderCostItemCharts();
+    }
+    function setCostItemSort(m) {
+      costItemSort = m;
+      document.querySelectorAll('[data-ci-sort]').forEach(b => b.classList.toggle('active', b.dataset.ciSort === m));
+      renderCostItemCharts();
+    }
+    function setCostItemView(v) {
+      document.querySelectorAll('[data-ci-view]').forEach(b => b.classList.toggle('active', b.dataset.ciView === v));
+      document.getElementById('ci-chart-view').classList.toggle('hidden', v !== 'chart');
+      document.getElementById('ci-table-view').classList.toggle('hidden', v !== 'table');
     }
 
     function switchPnlFormat(format) {
