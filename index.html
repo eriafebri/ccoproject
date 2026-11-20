@@ -627,7 +627,7 @@
       </button>
       <button id="mob-btn-pnl" onclick="switchTab('pnl')" class="flex flex-col items-center text-[10px] font-bold text-slate-400 role-hide-operator">
         <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
-        P&amp;L
+        IS
       </button>
       <button id="mob-btn-report" onclick="switchTab('report')" class="flex flex-col items-center text-[10px] font-bold text-slate-400 role-hide-operator">
         <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -4111,25 +4111,25 @@
 
       if (titleEl && subtitleEl) {
         if (currentPnlFormat === 'consolidated') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (KONSOLIDASI)";
+          titleEl.innerText = "INCOME STATEMENT (KONSOLIDASI)";
           subtitleEl.innerText = "Konsolidasi Budget vs Actual = OB + Coal + Mud + Topsoil";
         } else if (currentPnlFormat === 'wg_coal') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (COAL)";
+          titleEl.innerText = "INCOME STATEMENT (COAL)";
           subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Batubara (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'wg_ob') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (OVERBURDEN)";
+          titleEl.innerText = "INCOME STATEMENT (OVERBURDEN)";
           subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Overburden (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'wg_mud') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (MUD / LUMPUR)";
+          titleEl.innerText = "INCOME STATEMENT (MUD / LUMPUR)";
           subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Mud (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'wg_ts') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (TOPSOIL)";
+          titleEl.innerText = "INCOME STATEMENT (TOPSOIL)";
           subtitleEl.innerText = "Pemisahan Laporan Finansial & Operasional Sektor Topsoil (Volume & Seluruh Biaya)";
         } else if (currentPnlFormat === 'annual_budget') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (ANNUAL BUDGET)";
+          titleEl.innerText = "INCOME STATEMENT (ANNUAL BUDGET)";
           subtitleEl.innerText = "Distribusi Anggaran Biaya & Pendapatan Bulanan (Januari - Desember)";
         } else if (currentPnlFormat === 'annual_actual') {
-          titleEl.innerText = "PROFIT & LOSS STATEMENT (ANNUAL ACTUAL)";
+          titleEl.innerText = "INCOME STATEMENT (ANNUAL ACTUAL)";
           subtitleEl.innerText = "Distribusi Realisasi Keuangan Bulanan (Januari - Desember)";
         }
       }
